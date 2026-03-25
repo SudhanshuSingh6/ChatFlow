@@ -9,7 +9,11 @@ import java.util.UUID;
 @Entity
 @Table(name = "messages", indexes = {
         @Index(name = "idx_conversation_seq",
-                columnList = "conversationId, sequenceNumber")
+                columnList = "conversationId, sequenceNumber",
+                unique = true),
+        @Index(name = "idx_msg_sender", columnList = "senderId"),
+        @Index(name = "idx_msg_receiver", columnList = "receiverId"),
+        @Index(name = "idx_msg_created", columnList = "createdAt")
 })
 @Data
 @Builder
@@ -38,7 +42,8 @@ public class Message {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MessageStatus status;
+    @Builder.Default
+    private MessageStatus status = MessageStatus.SENT;
 
     @Column(nullable = false)
     private Long sequenceNumber;
@@ -51,6 +56,9 @@ public class Message {
 
     @PrePersist
     public void prePersist() {
+        if (status == null) {
+            status = MessageStatus.SENT;
+        }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
