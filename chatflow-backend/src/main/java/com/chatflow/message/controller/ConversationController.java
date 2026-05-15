@@ -53,4 +53,15 @@ public class ConversationController {
         UUID callerId = UUID.fromString(principal.getName());
         return conversationService.getMessages(callerId, conversationId, before, limit);
     }
+
+    @GetMapping("/{conversationId}/messages/after")
+    public MessagePageResponse getMessagesAfter(
+            @PathVariable UUID conversationId,
+            @RequestParam long after,
+            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int limit,
+            Principal principal) {
+
+        UUID callerId = UUID.fromString(principal.getName());
+        return conversationService.getMessagesAfter(callerId, conversationId, after, limit);
+    }
 }

@@ -64,6 +64,15 @@ public class ConversationService {
                 .toList();
     }
 
+    /**
+     * Returns a cursor-paginated page of messages.
+     *
+     * @param callerId must be a participant — 403 if not
+     * @param convId   the conversation to read
+     * @param before   exclusive upper bound on sequenceNumber;
+     *                 pass Long.MAX_VALUE to get the latest page
+     * @param limit    page size, capped at MAX_PAGE_SIZE
+     */
     @Transactional(readOnly = true)
     public MessagePageResponse getMessages(UUID callerId, UUID convId, long before, int limit) {
         Conversation conversation = conversationRepository.findById(convId)
@@ -76,6 +85,47 @@ public class ConversationService {
         int pageSize = Math.min(limit, MAX_PAGE_SIZE);
         List<Message> messages = messageRepository.findPageBefore(
                 convId, before, PageRequest.of(0, pageSize));
+
+        List<MessageResponse> responses = messages.stream()
+                .map(MessageMapper::toMessageResponse)
+                .toList();
+
+        // nextCursor is the lowest sequenceNumber in this page — what the client
+        // passes as ?before= on the next request. Null means no more pages.
+        Long nextCursor = messages.size() == pageSize
+                ? messages.get(messages.size() - 1).getSequenceNumber()
+                : null;
+
+        return MessagePageResponse.builder()
+                .messages(responses)
+                .nextCursor(nextCursor)
+                .build();
+    }
+
+    /**
+     * Gap-fill: returns messages with sequenceNumber > after, oldest first.
+     *
+     * The client calls this when it detects a gap:
+     *   received message with seq N but lastSeen was N-2
+     *   -> call ?after={lastSeen} to fetch the missing messages.
+     *
+     * @param callerId must be a participant — 403 if not
+     * @param convId   the conversation to read
+     * @param after    exclusive lower bound on sequenceNumber
+     * @param limit    page size, capped at MAX_PAGE_SIZE
+     */
+    @Transactional(readOnly = true)
+    public MessagePageResponse getMessagesAfter(UUID callerId, UUID convId, long after, int limit) {
+        Conversation conversation = conversationRepository.findById(convId)
+                .orElseThrow(() -> new IllegalArgumentException("Conversation not found: " + convId));
+
+        if (!isParticipant(conversation, callerId)) {
+            throw new SecurityException("User " + callerId + " is not a participant in conversation " + convId);
+        }
+
+        int pageSize = Math.min(limit, MAX_PAGE_SIZE);
+        List<Message> messages = messageRepository.findPageAfter(
+                convId, after, PageRequest.of(0, pageSize));
 
         List<MessageResponse> responses = messages.stream()
                 .map(MessageMapper::toMessageResponse)
