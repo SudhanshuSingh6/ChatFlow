@@ -70,7 +70,6 @@ public class DeliveryService {
                     "User " + receiverId + " is not a participant in conversation " + conversationId);
         }
 
-        // SENT → DELIVERED
         List<Message> sentMessages = messageRepository
                 .findByConversationIdAndReceiverIdAndStatus(
                         conversationId, receiverId, MessageStatus.SENT);
@@ -87,16 +86,14 @@ public class DeliveryService {
             sentMessages.forEach(m -> pushStatusUpdate(m.getSenderId(), m, MessageStatus.DELIVERED));
         }
 
-        // Clear unread counter
         conversation.clearUnreadFor(receiverId);
         conversationRepository.save(conversation);
         log.debug("Cleared unread count for userId={} in conversation={}", receiverId, conversationId);
 
-        // DELIVERED → SEEN (optional — only when client supplies the high-water mark)
         if (request.getUpToSequenceNumber() != null) {
             log.debug("upToSequenceNumber={} present — running SEEN transition in same transaction",
                     request.getUpToSequenceNumber());
-           // markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
+            markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
         }
     }
 
@@ -113,36 +110,36 @@ public class DeliveryService {
                     "User " + receiverId + " is not a participant in conversation " + conversationId);
         }
 
-        //markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
+        markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
     }
 
-   // private void markSeenInternal(UUID receiverId, UUID conversationId, long upTo) {
-     //   List<UUID> senderIds = messageRepository.findSenderIdsByConversationAndReceiver(
-     //           conversationId, receiverId, upTo);
+    private void markSeenInternal(UUID receiverId, UUID conversationId, long upTo) {
+        List<UUID> senderIds = messageRepository.findSenderIdsByConversationAndReceiver(
+                conversationId, receiverId, upTo);
 
-  //      if (senderIds.isEmpty()) {
-  //          log.debug("No DELIVERED messages up to seq={} in conversation={}", upTo, conversationId);
-  //          return;
-  //      }
+        if (senderIds.isEmpty()) {
+            log.debug("No DELIVERED messages up to seq={} in conversation={}", upTo, conversationId);
+            return;
+        }
 
-  //      int updated = messageRepository.bulkMarkSeen(
-  //              conversationId, receiverId, upTo, LocalDateTime.now());
+        int updated = messageRepository.bulkMarkSeen(
+                conversationId, receiverId, upTo, LocalDateTime.now());
 
-   //     log.debug("Marked {} messages SEEN up to seq={} in conversation={}", updated, upTo, conversationId);
+        log.debug("Marked {} messages SEEN up to seq={} in conversation={}", updated, upTo, conversationId);
 
-  //      SeenResponse seenResponse = SeenResponse.builder()
-   //             .conversationId(conversationId)
-    //            .lastSeenSequenceNumber(upTo)
-    //            .build();
+        SeenResponse seenResponse = SeenResponse.builder()
+                .conversationId(conversationId)
+                .lastSeenSequenceNumber(upTo)
+                .build();
 
-      //  senderIds.forEach(senderId ->
-     //           messagingTemplate.convertAndSendToUser(
-      //                  senderId.toString(),
-      //                  "/queue/status",
-     //                   seenResponse
-      //          )
-     //   );
-   // }
+        senderIds.forEach(senderId ->
+                messagingTemplate.convertAndSendToUser(
+                        senderId.toString(),
+                        "/queue/status",
+                        seenResponse
+                )
+        );
+    }
 
     void pushStatusUpdate(UUID recipientId, Message message, MessageStatus status) {
         StatusUpdateResponse update = StatusUpdateResponse.builder()
