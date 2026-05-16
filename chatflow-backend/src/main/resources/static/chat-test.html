@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatFlow WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; }
+        input, button, textarea { margin: 0.4rem 0; width: 100%; padding: 0.7rem; }
+        button { cursor: pointer; }
+        #log { height: 300px; }
+    </style>
+</head>
+<body>
+
+<h2>ChatFlow WebSocket Test</h2>
+
+<label>Message</label>
+<input id="messageInput" placeholder="Type message..." />
+
+<button onclick="connect()">Connect</button>
+<button onclick="subscribeTest()">Subscribe /topic/test</button>
+<button onclick="sendTest()">Send /app/chat.test</button>
+<button onclick="disconnect()">Disconnect</button>
+
+<label>Logs</label>
+<textarea id="log" readonly></textarea>
+
+<script>
+    let stompClient = null;
+
+    function log(msg) {
+        const logBox = document.getElementById("log");
+        logBox.value += msg + "\n";
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function connect() {
+        const socket = new SockJS("/ws");
+        stompClient = new StompJs.Client({
+            webSocketFactory: () => socket,
+            reconnectDelay: 3000,
+            debug: str => log("[DEBUG] " + str)
+        });
+
+        stompClient.onConnect = frame => {
+            log("Connected: " + frame.headers["server"] || "STOMP connected");
+        };
+
+        stompClient.onStompError = frame => {
+            log("Broker error: " + frame.headers["message"]);
+        };
+
+        stompClient.activate();
+    }
+
+    function subscribeTest() {
+        if (!stompClient || !stompClient.connected) {
+            log("Not connected");
+            return;
+        }
+
+        stompClient.subscribe("/topic/test", message => {
+            log("Received: " + message.body);
+        });
+
+        log("Subscribed to /topic/test");
+    }
+
+    function sendTest() {
+        if (!stompClient || !stompClient.connected) {
+            log("Not connected");
+            return;
+        }
+
+        const msg = document.getElementById("messageInput").value;
+        stompClient.publish({
+            destination: "/app/chat.test",
+            body: msg
+        });
+
+        log("Sent: " + msg);
+    }
+
+    function disconnect() {
+        if (stompClient) {
+            stompClient.deactivate();
+            log("Disconnected");
+        }
+    }
+</script>
+
+</body>
+</html>

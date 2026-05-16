@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -28,15 +29,19 @@ public class ChatService {
     @Transactional
     public MessageResponse sendMessage(UUID senderId, SendMessageRequest request) {
 
-        if (messageRepository.existsByClientMessageId(request.getClientMessageId())) {
+        Optional<Message> existing = messageRepository.findByClientMessageId(request.getClientMessageId());
+        if (existing.isPresent()) {
             log.debug("Duplicate clientMessageId={} — returning existing message",
                     request.getClientMessageId());
-            return messageRepository.findByClientMessageId(request.getClientMessageId())
+            return existing
+                    .filter(message -> message.getSenderId().equals(senderId))
                     .map(MessageResponse::from)
-                    .orElseThrow(); // can't happen: existsBy returned true
+                    .orElseThrow(() -> new SecurityException(
+                            "User " + senderId + " cannot access clientMessageId "
+                                    + request.getClientMessageId()));
         }
-
-        Conversation conversation = conversationRepository.findById(request.getConversationId())
+        Conversation conversation = conversationRepository
+                .findByIdForUpdate(request.getConversationId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Conversation not found: " + request.getConversationId()));
 
@@ -45,13 +50,19 @@ public class ChatService {
                     + request.getConversationId());
         }
 
+        UUID receiverId = resolveReceiver(conversation, senderId);
+        if (!receiverId.equals(request.getReceiverId())) {
+            throw new SecurityException("Receiver " + request.getReceiverId()
+                    + " is not the other participant in conversation " + request.getConversationId());
+        }
+
         Long seq = messageRepository.nextSequenceNumber(request.getConversationId());
 
         Message message = Message.builder()
                 .clientMessageId(request.getClientMessageId())
                 .conversationId(request.getConversationId())
                 .senderId(senderId)
-                .receiverId(request.getReceiverId())
+                .receiverId(receiverId)
                 .content(request.getContent())
                 .status(MessageStatus.SENT)
                 .sequenceNumber(seq)
@@ -63,19 +74,26 @@ public class ChatService {
 
         conversation.setLastMessage(request.getContent());
         conversation.setLastMessageAt(LocalDateTime.now());
+        conversation.incrementUnreadFor(senderId);
         conversationRepository.save(conversation);
         MessageResponse response = MessageResponse.from(saved);
         messagingTemplate.convertAndSendToUser(
-                request.getReceiverId().toString(),
+                receiverId.toString(),
                 "/queue/messages",
                 response
         );
-        log.debug("Delivered message to receiver={}", request.getReceiverId());
+        log.debug("Delivered message to receiver={}", receiverId);
         return response;
     }
 
     private boolean isParticipant(Conversation conversation, UUID userId) {
         return userId.equals(conversation.getParticipantOneId())
                 || userId.equals(conversation.getParticipantTwoId());
+    }
+
+    private UUID resolveReceiver(Conversation conversation, UUID senderId) {
+        return senderId.equals(conversation.getParticipantOneId())
+                ? conversation.getParticipantTwoId()
+                : conversation.getParticipantOneId();
     }
 }

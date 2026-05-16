@@ -13,6 +13,7 @@ import java.util.UUID;
                 unique = true),
         @Index(name = "idx_msg_sender", columnList = "senderId"),
         @Index(name = "idx_msg_receiver", columnList = "receiverId"),
+        @Index(name = "idx_msg_receiver_status", columnList = "receiverId, status"),
         @Index(name = "idx_msg_created", columnList = "createdAt")
 })
 @Data

@@ -3,6 +3,7 @@ package com.chatflow.message.controller;
 import com.chatflow.message.dto.MessageResponse;
 import com.chatflow.message.dto.SendMessageRequest;
 import com.chatflow.message.service.ChatService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -23,9 +24,9 @@ public class ChatController {
     @MessageMapping("/chat.send")
     @SendToUser("/queue/messages.ack")
     public MessageResponse sendMessage(
-            @Payload SendMessageRequest request,
+            @Payload @Valid SendMessageRequest request,
             Principal principal) {
-              UUID senderId = resolveSenderId(principal, request);
+        UUID senderId = resolveSenderId(principal, request);
 
         log.debug("chat.send from sender={} clientMessageId={}",
                 senderId, request.getClientMessageId());

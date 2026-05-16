@@ -1,15 +1,17 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/chatflow
-    username: postgres
-    password: chatflow
+    username: chat
+    password: chat
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-      dialect: org.hibernate.dialect.PostgreSQLDialect
-      format_sql: true
+    show-sql: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-must-be-at-least-32-chars}
+    expiration-ms: 86400000   # 24 hours
+
 server:
-  port: 8080
+  port: 8081

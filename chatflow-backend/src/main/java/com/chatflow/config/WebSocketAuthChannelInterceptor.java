@@ -1,5 +1,7 @@
 package com.chatflow.config;
 
+import com.chatflow.message.repository.ConversationRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -17,14 +19,29 @@ import java.util.UUID;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
+
+    private static final String TYPING_TOPIC_PREFIX = "/topic/typing.";
+    private static final String PRESENCE_TOPIC_PREFIX = "/topic/presence.";
+
+    private final ConversationRepository conversationRepository;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor =
                 MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-        if (accessor == null || accessor.getCommand() != StompCommand.CONNECT) {
+        if (accessor == null) {
+            return message;
+        }
+
+        if (accessor.getCommand() == StompCommand.SUBSCRIBE) {
+            validateSubscription(accessor);
+            return message;
+        }
+
+        if (accessor.getCommand() != StompCommand.CONNECT) {
             return message;
         }
 
@@ -49,5 +66,48 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
 
         log.debug("STOMP CONNECT authenticated userId={}", userId);
         return message;
+    }
+
+    private void validateSubscription(StompHeaderAccessor accessor) {
+        String destination = accessor.getDestination();
+        if (destination == null || !isConversationTopic(destination)) {
+            return;
+        }
+
+        UUID userId = extractPrincipalUserId(accessor);
+        UUID conversationId = extractConversationId(destination);
+
+        if (!conversationRepository.existsParticipant(conversationId, userId)) {
+            log.warn("Rejecting subscription userId={} destination={}", userId, destination);
+            throw new SecurityException("User " + userId
+                    + " is not a participant in conversation " + conversationId);
+        }
+    }
+
+    private boolean isConversationTopic(String destination) {
+        return destination.startsWith(TYPING_TOPIC_PREFIX)
+                || destination.startsWith(PRESENCE_TOPIC_PREFIX);
+    }
+
+    private UUID extractConversationId(String destination) {
+        String rawId = destination.startsWith(TYPING_TOPIC_PREFIX)
+                ? destination.substring(TYPING_TOPIC_PREFIX.length())
+                : destination.substring(PRESENCE_TOPIC_PREFIX.length());
+        try {
+            return UUID.fromString(rawId);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Invalid conversation topic: " + destination);
+        }
+    }
+
+    private UUID extractPrincipalUserId(StompHeaderAccessor accessor) {
+        if (accessor.getUser() == null) {
+            throw new SecurityException("Unauthenticated WebSocket subscription");
+        }
+        try {
+            return UUID.fromString(accessor.getUser().getName());
+        } catch (IllegalArgumentException ex) {
+            throw new SecurityException("Invalid WebSocket principal");
+        }
     }
 }

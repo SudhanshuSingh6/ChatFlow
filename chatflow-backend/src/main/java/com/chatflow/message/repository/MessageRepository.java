@@ -81,6 +81,7 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     @Query("SELECT DISTINCT m.senderId FROM Message m " +
             "WHERE m.conversationId = :conversationId " +
             "AND m.receiverId = :receiverId " +
+            "AND m.status = 'DELIVERED' " +
             "AND m.sequenceNumber <= :upToSequenceNumber")
     List<UUID> findSenderIdsByConversationAndReceiver(
             @Param("conversationId") UUID conversationId,

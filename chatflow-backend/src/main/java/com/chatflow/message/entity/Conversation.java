@@ -32,6 +32,14 @@ public class Conversation {
 
     private LocalDateTime lastMessageAt;
 
+    @Builder.Default
+    @Column(nullable = false)
+    private int unreadCountP1 = 0;
+
+    @Builder.Default
+    @Column(nullable = false)
+    private int unreadCountP2 = 0;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -48,5 +56,19 @@ public class Conversation {
                 .participantOneId(p1)
                 .participantTwoId(p2)
                 .build();
+    }
+    public void incrementUnreadFor(UUID senderId) {
+        if (senderId.equals(participantOneId)) {
+            unreadCountP2++;
+        } else {
+            unreadCountP1++;
+        }
+    }
+    public void clearUnreadFor(UUID userId) {
+        if (userId.equals(participantOneId)) {
+            unreadCountP1 = 0;
+        } else {
+            unreadCountP2 = 0;
+        }
     }
 }
