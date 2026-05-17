@@ -1,5 +1,7 @@
 package com.chatflow.message.service;
 
+import com.chatflow.infra.websocket.OutboundMessage;
+import com.chatflow.infra.websocket.WebSocketGateway;
 import com.chatflow.message.dto.MessageResponse;
 import com.chatflow.message.dto.SendMessageRequest;
 import com.chatflow.message.entity.Conversation;
@@ -9,7 +11,6 @@ import com.chatflow.message.repository.ConversationRepository;
 import com.chatflow.message.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,30 +25,33 @@ public class ChatService {
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final WebSocketGateway webSocketGateway;
 
     @Transactional
-    public MessageResponse sendMessage(UUID senderId, SendMessageRequest request) {
-
+    public MessageResponse sendMessage(UUID senderId, SendMessageRequest request, String requestId) {
         Optional<Message> existing = messageRepository.findByClientMessageId(request.getClientMessageId());
+
         if (existing.isPresent()) {
-            log.debug("Duplicate clientMessageId={} — returning existing message",
-                    request.getClientMessageId());
-            return existing
-                    .filter(message -> message.getSenderId().equals(senderId))
-                    .map(MessageResponse::from)
-                    .orElseThrow(() -> new SecurityException(
-                            "User " + senderId + " cannot access clientMessageId "
-                                    + request.getClientMessageId()));
+            Message message = existing.get();
+            if (!message.getSenderId().equals(senderId)) {
+                throw new SecurityException("User " + senderId
+                        + " cannot access clientMessageId " + request.getClientMessageId());
+            }
+
+            MessageResponse response = MessageResponse.from(message);
+            webSocketGateway.sendToUser(senderId,
+                    OutboundMessage.responseTo(OutboundMessage.Type.MESSAGE_ACK, requestId, response));
+            return response;
         }
+
         Conversation conversation = conversationRepository
                 .findByIdForUpdate(request.getConversationId())
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Conversation not found: " + request.getConversationId()));
 
         if (!isParticipant(conversation, senderId)) {
-            throw new SecurityException("User " + senderId + " is not a participant in conversation "
-                    + request.getConversationId());
+            throw new SecurityException("User " + senderId
+                    + " is not a participant in conversation " + request.getConversationId());
         }
 
         UUID receiverId = resolveReceiver(conversation, senderId);
@@ -69,20 +73,23 @@ public class ChatService {
                 .build();
 
         Message saved = messageRepository.save(message);
-        log.debug("Saved message id={} seq={} conversation={}",
-                saved.getId(), seq, request.getConversationId());
 
         conversation.setLastMessage(request.getContent());
         conversation.setLastMessageAt(LocalDateTime.now());
         conversation.incrementUnreadFor(senderId);
         conversationRepository.save(conversation);
+
         MessageResponse response = MessageResponse.from(saved);
-        messagingTemplate.convertAndSendToUser(
-                receiverId.toString(),
-                "/queue/messages",
-                response
-        );
-        log.debug("Delivered message to receiver={}", receiverId);
+
+        webSocketGateway.sendToUser(senderId,
+                OutboundMessage.responseTo(OutboundMessage.Type.MESSAGE_ACK, requestId, response));
+
+        webSocketGateway.sendToUser(receiverId,
+                OutboundMessage.of(OutboundMessage.Type.MESSAGE, response));
+
+        log.debug("Saved message id={} seq={} conversation={} receiver={}",
+                saved.getId(), seq, request.getConversationId(), receiverId);
+
         return response;
     }
 

@@ -18,7 +18,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
-    static final String USER_ID_ATTR = "userId";
+    static public final String USER_ID_ATTR = "userId";
 
     private final JwtService jwtService;
 

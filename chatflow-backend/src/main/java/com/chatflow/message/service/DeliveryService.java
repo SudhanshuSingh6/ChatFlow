@@ -1,5 +1,7 @@
 package com.chatflow.message.service;
 
+import com.chatflow.infra.websocket.OutboundMessage;
+import com.chatflow.infra.websocket.WebSocketGateway;
 import com.chatflow.message.dto.AckRequest;
 import com.chatflow.message.dto.ConversationOpenRequest;
 import com.chatflow.message.dto.SeenRequest;
@@ -12,7 +14,6 @@ import com.chatflow.message.repository.ConversationRepository;
 import com.chatflow.message.repository.MessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,7 +28,7 @@ public class DeliveryService {
 
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final WebSocketGateway webSocketGateway;
 
     @Transactional
     public void ack(UUID receiverId, AckRequest request) {
@@ -36,23 +37,18 @@ public class DeliveryService {
                         "Message not found: " + request.getMessageId()));
 
         if (!message.getReceiverId().equals(receiverId)) {
-            throw new SecurityException(
-                    "User " + receiverId + " is not the receiver of message " + request.getMessageId());
+            throw new SecurityException("User " + receiverId
+                    + " is not the receiver of message " + request.getMessageId());
         }
 
         int updated = messageRepository.updateStatus(
-                message.getId(),
-                MessageStatus.SENT,
-                MessageStatus.DELIVERED,
-                LocalDateTime.now()
-        );
+                message.getId(), MessageStatus.SENT, MessageStatus.DELIVERED, LocalDateTime.now());
 
         if (updated == 0) {
-            log.debug("Message {} already past SENT — skipping DELIVERED push", message.getId());
+            log.debug("Message {} already past SENT; skipping DELIVERED push", message.getId());
             return;
         }
 
-        log.debug("Message {} marked DELIVERED", message.getId());
         pushStatusUpdate(message.getSenderId(), message, MessageStatus.DELIVERED);
     }
 
@@ -66,8 +62,8 @@ public class DeliveryService {
                         "Conversation not found: " + conversationId));
 
         if (!isParticipant(conversation, receiverId)) {
-            throw new SecurityException(
-                    "User " + receiverId + " is not a participant in conversation " + conversationId);
+            throw new SecurityException("User " + receiverId
+                    + " is not a participant in conversation " + conversationId);
         }
 
         List<Message> sentMessages = messageRepository
@@ -76,23 +72,18 @@ public class DeliveryService {
 
         if (!sentMessages.isEmpty()) {
             int updated = messageRepository.bulkUpdateStatus(
-                    conversationId,
-                    receiverId,
-                    MessageStatus.SENT,
-                    MessageStatus.DELIVERED,
-                    LocalDateTime.now()
-            );
-            log.debug("Bulk-marked {} messages DELIVERED in conversation={}", updated, conversationId);
+                    conversationId, receiverId,
+                    MessageStatus.SENT, MessageStatus.DELIVERED,
+                    LocalDateTime.now());
+
+            log.debug("Bulk-marked {} messages DELIVERED conversation={}", updated, conversationId);
             sentMessages.forEach(m -> pushStatusUpdate(m.getSenderId(), m, MessageStatus.DELIVERED));
         }
 
         conversation.clearUnreadFor(receiverId);
         conversationRepository.save(conversation);
-        log.debug("Cleared unread count for userId={} in conversation={}", receiverId, conversationId);
 
         if (request.getUpToSequenceNumber() != null) {
-            log.debug("upToSequenceNumber={} present — running SEEN transition in same transaction",
-                    request.getUpToSequenceNumber());
             markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
         }
     }
@@ -106,8 +97,8 @@ public class DeliveryService {
                         "Conversation not found: " + conversationId));
 
         if (!isParticipant(conversation, receiverId)) {
-            throw new SecurityException(
-                    "User " + receiverId + " is not a participant in conversation " + conversationId);
+            throw new SecurityException("User " + receiverId
+                    + " is not a participant in conversation " + conversationId);
         }
 
         markSeenInternal(receiverId, conversationId, request.getUpToSequenceNumber());
@@ -118,14 +109,17 @@ public class DeliveryService {
                 conversationId, receiverId, upTo);
 
         if (senderIds.isEmpty()) {
-            log.debug("No DELIVERED messages up to seq={} in conversation={}", upTo, conversationId);
+            log.debug("No DELIVERED messages up to seq={} conversation={}", upTo, conversationId);
             return;
         }
 
         int updated = messageRepository.bulkMarkSeen(
                 conversationId, receiverId, upTo, LocalDateTime.now());
 
-        log.debug("Marked {} messages SEEN up to seq={} in conversation={}", updated, upTo, conversationId);
+        if (updated == 0) {
+            log.debug("No messages newly marked SEEN up to seq={} conversation={}", upTo, conversationId);
+            return;
+        }
 
         SeenResponse seenResponse = SeenResponse.builder()
                 .conversationId(conversationId)
@@ -133,12 +127,8 @@ public class DeliveryService {
                 .build();
 
         senderIds.forEach(senderId ->
-                messagingTemplate.convertAndSendToUser(
-                        senderId.toString(),
-                        "/queue/status",
-                        seenResponse
-                )
-        );
+                webSocketGateway.sendToUser(senderId,
+                        OutboundMessage.of(OutboundMessage.Type.SEEN_UPDATE, seenResponse)));
     }
 
     void pushStatusUpdate(UUID recipientId, Message message, MessageStatus status) {
@@ -149,12 +139,8 @@ public class DeliveryService {
                 .sequenceNumber(message.getSequenceNumber())
                 .build();
 
-        messagingTemplate.convertAndSendToUser(
-                recipientId.toString(),
-                "/queue/status",
-                update
-        );
-        log.debug("Pushed {} status to userId={}", status, recipientId);
+        webSocketGateway.sendToUser(recipientId,
+                OutboundMessage.of(OutboundMessage.Type.STATUS_UPDATE, update));
     }
 
     private boolean isParticipant(Conversation conversation, UUID userId) {

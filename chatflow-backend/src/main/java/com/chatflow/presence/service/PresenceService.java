@@ -1,11 +1,12 @@
 package com.chatflow.presence.service;
 
+import com.chatflow.infra.websocket.OutboundMessage;
+import com.chatflow.infra.websocket.WebSocketGateway;
 import com.chatflow.message.entity.Conversation;
 import com.chatflow.message.repository.ConversationRepository;
 import com.chatflow.presence.dto.PresenceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -20,21 +21,17 @@ public class PresenceService {
 
     private final PresenceStore presenceStore;
     private final ConversationRepository conversationRepository;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final WebSocketGateway webSocketGateway;
 
     public void userConnected(UUID userId) {
         presenceStore.setOnline(userId);
-
-        Instant onlineSince = presenceStore.getOnlineSince(userId)
-                .orElse(Instant.now());
-
-        PresenceEvent event = PresenceEvent.online(userId, onlineSince);
-        broadcastToConversations(userId, event);
+        Instant onlineSince = presenceStore.getOnlineSince(userId).orElse(Instant.now());
+        broadcastToConversationPartners(userId, PresenceEvent.online(userId, onlineSince));
     }
 
     public void userDisconnected(UUID userId) {
         presenceStore.setOffline(userId);
-        broadcastToConversations(userId, PresenceEvent.offline(userId));
+        broadcastToConversationPartners(userId, PresenceEvent.offline(userId));
     }
 
     public boolean isOnline(UUID userId) {
@@ -45,19 +42,20 @@ public class PresenceService {
         return presenceStore.getOnlineSince(userId);
     }
 
-    private void broadcastToConversations(UUID userId, PresenceEvent event) {
+    private void broadcastToConversationPartners(UUID userId, PresenceEvent event) {
         List<Conversation> conversations = conversationRepository
                 .findByParticipantOneIdOrParticipantTwoIdOrderByLastMessageAtDesc(userId, userId);
 
-        conversations.stream()
-                .filter(c -> c.getLastMessageAt() != null)
-                .forEach(c -> {
-                    String topic = "/topic/presence." + c.getId();
-                    messagingTemplate.convertAndSend(topic, event);
-                    log.debug("Broadcast {} presence to topic={}", event.getStatus(), topic);
-                });
+        conversations.forEach(conversation -> {
+            UUID partnerId = conversation.getParticipantOneId().equals(userId)
+                    ? conversation.getParticipantTwoId()
+                    : conversation.getParticipantOneId();
 
-        log.debug("Presence {} broadcast to {} conversations for userId={}",
+            webSocketGateway.sendToUser(partnerId,
+                    OutboundMessage.of(OutboundMessage.Type.PRESENCE, event));
+        });
+
+        log.debug("Presence {} sent to {} partners for userId={}",
                 event.getStatus(), conversations.size(), userId);
     }
 }
