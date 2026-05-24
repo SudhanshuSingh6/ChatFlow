@@ -1,6 +1,11 @@
 package com.chatflow.infra.websocket;
 
 import com.chatflow.config.JwtHandshakeInterceptor;
+import com.chatflow.group.dto.GroupDeliveryAckRequest;
+import com.chatflow.group.dto.GroupReadReceiptRequest;
+import com.chatflow.group.dto.SendGroupMessageRequest;
+import com.chatflow.group.service.GroupChatService;
+import com.chatflow.group.service.GroupDeliveryService;
 import com.chatflow.message.dto.AckRequest;
 import com.chatflow.message.dto.ConversationOpenRequest;
 import com.chatflow.message.dto.SeenRequest;
@@ -11,6 +16,7 @@ import com.chatflow.message.service.ReplayService;
 import com.chatflow.presence.service.PresenceService;
 import com.chatflow.typing.dto.TypingEventRequest;
 import com.chatflow.typing.service.TypingStateManager;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import lombok.RequiredArgsConstructor;
@@ -20,9 +26,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
-import tools.jackson.databind.ObjectMapper;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -33,13 +37,26 @@ import java.util.UUID;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final WebSocketSessionRegistry sessionRegistry;
+    private final WebSocketGateway webSocketGateway;
     private final ObjectMapper objectMapper;
     private final Validator validator;
+
+    // 1:1
     private final ChatService chatService;
     private final DeliveryService deliveryService;
     private final ReplayService replayService;
+
+    // Group
+    private final GroupChatService groupChatService;
+    private final GroupDeliveryService groupDeliveryService;
+
+    // Shared
     private final PresenceService presenceService;
     private final TypingStateManager typingStateManager;
+
+    // ---------------------------------------------------------------
+    // Lifecycle
+    // ---------------------------------------------------------------
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -54,7 +71,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             presenceService.userConnected(userId);
         }
 
+        // Replay missed 1:1 messages
         replayService.replayForUser(userId);
+
+        // Replay missed group messages
+        groupChatService.replayForUser(userId);
 
         log.debug("WebSocket connected userId={} sessionId={}", userId, session.getId());
     }
@@ -62,12 +83,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         UUID userId = extractUserId(session);
-        if (userId == null) {
-            return;
-        }
+        if (userId == null) return;
 
-        boolean finalSessionClosed = sessionRegistry.remove(userId, session);
-        if (finalSessionClosed) {
+        boolean finalSession = sessionRegistry.remove(userId, session);
+        if (finalSession) {
             presenceService.userDisconnected(userId);
             typingStateManager.clearAllForUser(userId);
         }
@@ -87,7 +106,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         UUID userId = extractUserId(session);
         if (userId == null) {
-            sendError(session, null, "UNAUTHENTICATED", "Unauthenticated WebSocket session");
+            sendError(session, null, "Unauthenticated");
             return;
         }
 
@@ -95,38 +114,32 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             inbound = objectMapper.readValue(message.getPayload(), InboundMessage.class);
         } catch (Exception ex) {
-            log.warn("Malformed WebSocket frame userId={}: {}", userId, ex.getMessage());
-            sendError(session, null, "MALFORMED_JSON",
-                    "Malformed message; expected {type, requestId, payload}");
+            log.warn("Malformed message from userId={}: {}", userId, ex.getMessage());
+            sendError(session, null, "Malformed message — expected {type, requestId, payload}");
             return;
         }
 
         if (inbound.getType() == null) {
-            sendError(session, inbound.getRequestId(), "MISSING_TYPE", "Missing type field");
+            sendError(session, inbound.getRequestId(), "Missing type field");
             return;
         }
 
         try {
             dispatch(session, userId, inbound);
-        } catch (PayloadValidationException ex) {
-            sendError(session, inbound.getRequestId(), "VALIDATION_ERROR",
-                    "Invalid payload", ex.getDetails());
-        } catch (SecurityException ex) {
-            log.warn("Forbidden WebSocket event userId={} type={}: {}",
-                    userId, inbound.getType(), ex.getMessage());
-            sendError(session, inbound.getRequestId(), "FORBIDDEN", ex.getMessage());
-        } catch (IllegalArgumentException ex) {
-            log.warn("Bad WebSocket event userId={} type={}: {}",
-                    userId, inbound.getType(), ex.getMessage());
-            sendError(session, inbound.getRequestId(), "BAD_REQUEST", ex.getMessage());
+        } catch (IllegalArgumentException | SecurityException ex) {
+            log.warn("Client error userId={} type={}: {}", userId, inbound.getType(), ex.getMessage());
+            sendError(session, inbound.getRequestId(), ex.getMessage());
         } catch (Exception ex) {
             log.error("Server error userId={} type={}", userId, inbound.getType(), ex);
-            sendError(session, inbound.getRequestId(), "INTERNAL_ERROR", "Internal server error");
+            sendError(session, inbound.getRequestId(), "Internal server error");
         }
     }
 
-    private void dispatch(WebSocketSession session, UUID userId, InboundMessage inbound) throws Exception {
+    private void dispatch(WebSocketSession session, UUID userId, InboundMessage inbound)
+            throws Exception {
         switch (inbound.getType()) {
+
+            // --- 1:1 ---
             case SEND_MESSAGE -> {
                 SendMessageRequest req = parseAndValidate(inbound, SendMessageRequest.class);
                 chatService.sendMessage(userId, req, inbound.getRequestId());
@@ -143,6 +156,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 SeenRequest req = parseAndValidate(inbound, SeenRequest.class);
                 deliveryService.markSeen(userId, req);
             }
+
+            // --- Group ---
+            case GROUP_SEND_MESSAGE -> {
+                SendGroupMessageRequest req = parseAndValidate(inbound, SendGroupMessageRequest.class);
+                groupChatService.sendMessage(userId, req, inbound.getRequestId());
+            }
+            case GROUP_READ_RECEIPT -> {
+                GroupReadReceiptRequest req = parseAndValidate(inbound, GroupReadReceiptRequest.class);
+                groupDeliveryService.markRead(userId, req);
+            }
+            case GROUP_MESSAGE_DELIVERED -> {
+                GroupDeliveryAckRequest req =
+                        parseAndValidate(inbound, GroupDeliveryAckRequest.class);
+
+                groupDeliveryService.markDelivered(
+                        userId,
+                        req,
+                        inbound.getRequestId()
+                );
+            }
+
             case TYPING -> {
                 TypingEventRequest req = parseAndValidate(inbound, TypingEventRequest.class);
                 typingStateManager.handleTyping(req.getConversationId(), userId, req.getTyping());
@@ -155,19 +189,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private <T> T parseAndValidate(InboundMessage inbound, Class<T> type) throws Exception {
         if (inbound.getPayload() == null || inbound.getPayload().isNull()) {
-            throw new PayloadValidationException(List.of("payload must not be null"));
+            throw new IllegalArgumentException("Missing payload");
         }
-
         T value = objectMapper.treeToValue(inbound.getPayload(), type);
         Set<ConstraintViolation<T>> violations = validator.validate(value);
-
         if (!violations.isEmpty()) {
-            List<String> details = violations.stream()
+            String msg = violations.stream()
                     .map(v -> v.getPropertyPath() + " " + v.getMessage())
-                    .toList();
-            throw new PayloadValidationException(details);
+                    .findFirst().orElse("Invalid payload");
+            throw new IllegalArgumentException(msg);
         }
-
         return value;
     }
 
@@ -176,25 +207,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         return attr instanceof UUID uuid ? uuid : null;
     }
 
-    private void sendError(WebSocketSession session, String requestId, String code, String message) {
-        sendDirect(session, OutboundMessage.error(requestId, code, message));
-    }
-
-    private void sendError(WebSocketSession session, String requestId,
-                           String code, String message, List<String> details) {
-        sendDirect(session, OutboundMessage.error(requestId, code, message, details));
+    private void sendError(WebSocketSession session, String requestId, String message) {
+        sendDirect(session, OutboundMessage.error(requestId, message));
     }
 
     private void sendDirect(WebSocketSession session, OutboundMessage message) {
         try {
             String json = objectMapper.writeValueAsString(message);
             synchronized (session) {
-                if (session.isOpen()) {
-                    session.sendMessage(new TextMessage(json));
-                }
+                if (session.isOpen()) session.sendMessage(new TextMessage(json));
             }
         } catch (Exception ex) {
-            log.warn("Failed to send WebSocket frame: {}", ex.getMessage());
+            log.warn("Failed to send websocket frame: {}", ex.getMessage());
         }
     }
 
@@ -202,20 +226,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         try {
             session.close(status);
         } catch (Exception ex) {
-            log.warn("Failed to close WebSocket session: {}", ex.getMessage());
-        }
-    }
-
-    private static class PayloadValidationException extends RuntimeException {
-        private final List<String> details;
-
-        PayloadValidationException(List<String> details) {
-            super("Invalid payload");
-            this.details = details;
-        }
-
-        List<String> getDetails() {
-            return details;
+            log.warn("Failed to close session: {}", ex.getMessage());
         }
     }
 }

@@ -3,17 +3,24 @@ package com.chatflow.infra.websocket;
 import lombok.Builder;
 import lombok.Data;
 
-import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
 public class OutboundMessage {
 
     public enum Type {
+        // 1:1
         MESSAGE,
         MESSAGE_ACK,
         STATUS_UPDATE,
         SEEN_UPDATE,
+        // Group
+        GROUP_MESSAGE,
+        GROUP_MESSAGE_ACK,
+        GROUP_READ_RECEIPT,
+        GROUP_DELIVERY_ACK,
+        // Shared
         PRESENCE,
         TYPING,
         ERROR,
@@ -39,19 +46,11 @@ public class OutboundMessage {
                 .build();
     }
 
-    public static OutboundMessage error(String requestId, String code, String message) {
+    public static OutboundMessage error(String requestId, String message) {
         return OutboundMessage.builder()
                 .type(Type.ERROR)
                 .requestId(requestId)
-                .payload(WebSocketErrorPayload.of(code, message))
-                .build();
-    }
-
-    public static OutboundMessage error(String requestId, String code, String message, List<String> details) {
-        return OutboundMessage.builder()
-                .type(Type.ERROR)
-                .requestId(requestId)
-                .payload(WebSocketErrorPayload.of(code, message, details))
+                .payload(Map.of("message", message))
                 .build();
     }
 }
