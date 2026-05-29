@@ -54,8 +54,7 @@ public class FriendService {
                         );
                     }
 
-                    existing.setInitiatorId(callerId);
-                    existing.setStatus(FriendshipStatus.PENDING);
+                    existing.resend(callerId);
 
                     log.debug(
                             "Re-sent friend request from {} to {}",

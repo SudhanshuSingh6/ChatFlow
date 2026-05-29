@@ -1,7 +1,11 @@
 package com.chatflow.config;
 
+import com.chatflow.media.exception.MediaValidationException;
+import com.chatflow.media.storage.StorageException;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -13,64 +17,60 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.net.URI;
 import java.util.List;
 
+@Slf4j
 @RestControllerAdvice
 public class RestExceptionHandler {
 
+    @ExceptionHandler(StorageException.class)
+    public ProblemDetail handleStorage(StorageException ex, HttpServletRequest request) {
+        log.error("Storage error on {}", request.getRequestURI(), ex);
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Storage error", "Failed to store or retrieve media file", request);
+    }
+
+    @ExceptionHandler(MediaValidationException.class)
+    public ProblemDetail handleMediaValidation(MediaValidationException ex,
+                                               HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "Media validation failed",
+                ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex,
+                                             HttpServletRequest request) {
+        return problem(HttpStatus.PAYLOAD_TOO_LARGE, "File too large",
+                "The uploaded file exceeds the maximum permitted size", request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleBadRequest(IllegalArgumentException ex, HttpServletRequest request) {
-        return problem(
-                HttpStatus.BAD_REQUEST,
-                "Bad request",
-                ex.getMessage(),
-                request
-        );
+    public ProblemDetail handleBadRequest(IllegalArgumentException ex,
+                                          HttpServletRequest request) {
+        return problem(HttpStatus.BAD_REQUEST, "Bad request", ex.getMessage(), request);
     }
 
     @ExceptionHandler(SecurityException.class)
-    public ProblemDetail handleForbidden(SecurityException ex, HttpServletRequest request) {
-        return problem(
-                HttpStatus.FORBIDDEN,
-                "Forbidden",
-                ex.getMessage(),
-                request
-        );
+    public ProblemDetail handleForbidden(SecurityException ex,
+                                         HttpServletRequest request) {
+        return problem(HttpStatus.FORBIDDEN, "Forbidden", ex.getMessage(), request);
     }
 
     @ExceptionHandler({
             BadCredentialsException.class,
             AuthenticationException.class
     })
-    public ProblemDetail handleUnauthorized(Exception ex, HttpServletRequest request) {
-        return problem(
-                HttpStatus.UNAUTHORIZED,
-                "Unauthorized",
-                ex.getMessage(),
-                request
-        );
+    public ProblemDetail handleUnauthorized(Exception ex,
+                                            HttpServletRequest request) {
+        return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage(), request);
     }
 
-    @ExceptionHandler(HandlerMethodValidationException.class)
-    public ProblemDetail handleMethodValidation(HandlerMethodValidationException ex,
-                                                HttpServletRequest request) {
-        List<String> errors = ex.getParameterValidationResults().stream()                .flatMap(r -> r.getResolvableErrors().stream())
-                .map(this::formatResolvableError)
-                .toList();
-
-        ProblemDetail problem = problem(
-                HttpStatus.BAD_REQUEST,
-                "Validation failed",
-                "Parameter validation failed",
-                request
-        );
-        problem.setProperty("errors", errors);
-        return problem;
-    }
-
+    /**
+     * Fires when @Valid fails on a @RequestBody parameter.
+     * Collects all field-level errors into a structured list.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail handleBodyValidation(MethodArgumentNotValidException ex,
                                               HttpServletRequest request) {
@@ -90,9 +90,22 @@ public class RestExceptionHandler {
         return problem;
     }
 
-    private String formatResolvableError(MessageSourceResolvable error) {
-        String message = error.getDefaultMessage();
-        return message == null ? error.toString() : message;
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ProblemDetail handleMethodValidation(HandlerMethodValidationException ex,
+                                                HttpServletRequest request) {
+        List<String> errors = ex.getAllValidationResults().stream()
+                .flatMap(r -> r.getResolvableErrors().stream())
+                .map(this::formatResolvableError)
+                .toList();
+
+        ProblemDetail problem = problem(
+                HttpStatus.BAD_REQUEST,
+                "Validation failed",
+                "Parameter validation failed",
+                request
+        );
+        problem.setProperty("errors", errors);
+        return problem;
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -126,6 +139,7 @@ public class RestExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex, HttpServletRequest request) {
+        log.error("Unexpected error on {}", request.getRequestURI(), ex);
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "Internal server error",
@@ -133,6 +147,8 @@ public class RestExceptionHandler {
                 request
         );
     }
+
+    // --- helpers ---
 
     private ProblemDetail problem(HttpStatus status,
                                   String title,
@@ -149,14 +165,8 @@ public class RestExceptionHandler {
         return error.getField() + " " + error.getDefaultMessage();
     }
 
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ProblemDetail handleTypeMismatch(MethodArgumentTypeMismatchException ex,
-                                            HttpServletRequest request) {
-        return problem(
-                HttpStatus.BAD_REQUEST,
-                "Invalid parameter",
-                "Invalid value for parameter '" + ex.getName() + "'",
-                request
-        );
+    private String formatResolvableError(MessageSourceResolvable error) {
+        String message = error.getDefaultMessage();
+        return message == null ? error.toString() : message;
     }
 }

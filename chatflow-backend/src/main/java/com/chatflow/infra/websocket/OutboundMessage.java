@@ -24,8 +24,12 @@ public class OutboundMessage {
         PRESENCE,
         TYPING,
         ERROR,
-        PONG
-    }
+        PONG,
+        // Media
+        MEDIA_MESSAGE,
+        MEDIA_THUMBNAIL_READY,
+
+        }
 
     private Type type;
     private String requestId;

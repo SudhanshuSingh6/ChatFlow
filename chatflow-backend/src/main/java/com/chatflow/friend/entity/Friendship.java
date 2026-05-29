@@ -104,6 +104,11 @@ public class Friendship {
         );
     }
 
+    public void resend(UUID initiatorId) {
+        this.initiatorId = initiatorId;
+        this.status = FriendshipStatus.PENDING;
+    }
+    
     public void accept() {
         this.status = FriendshipStatus.ACCEPTED;
     }
