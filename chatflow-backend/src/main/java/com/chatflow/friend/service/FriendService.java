@@ -5,15 +5,25 @@ import com.chatflow.friend.dto.FriendshipResponse;
 import com.chatflow.friend.entity.Friendship;
 import com.chatflow.friend.entity.FriendshipStatus;
 import com.chatflow.friend.repository.FriendshipRepository;
+import com.chatflow.infra.outbox.OutboxEventType;
+import com.chatflow.infra.outbox.OutboxWriter;
+import com.chatflow.infra.tx.AfterCommit;
+import com.chatflow.infra.websocket.OutboundMessage;
+import com.chatflow.infra.websocket.WebSocketGateway;
+import com.chatflow.notification.entity.NotificationType;
+import com.chatflow.notification.entity.ReferenceType;
+import com.chatflow.notification.event.NotificationCommand;
 import com.chatflow.user.entity.User;
 import com.chatflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -23,6 +33,8 @@ public class FriendService {
 
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
+    private final WebSocketGateway webSocketGateway;
+    private final OutboxWriter outboxWriter;
 
     @Transactional
     public FriendshipResponse sendRequest(UUID callerId, FriendRequest request) {
@@ -39,7 +51,7 @@ public class FriendService {
             );
         }
 
-        return friendshipRepository.findByUsers(callerId, targetId)
+        Friendship friendship = friendshipRepository.findByUsers(callerId, targetId)
                 .map(existing -> {
 
                     if (existing.getStatus() == FriendshipStatus.ACCEPTED) {
@@ -62,22 +74,44 @@ public class FriendService {
                             targetId
                     );
 
-                    return FriendshipResponse.from(existing, callerId);
+                    return existing;
                 })
                 .orElseGet(() -> {
 
-                    Friendship friendship = friendshipRepository.save(
-                            Friendship.create(callerId, targetId)
-                    );
+                    try {
+                        Friendship created = friendshipRepository.saveAndFlush(
+                                Friendship.create(callerId, targetId)
+                        );
 
-                    log.debug(
-                            "Sent friend request from {} to {}",
-                            callerId,
-                            targetId
-                    );
+                        log.debug(
+                                "Sent friend request from {} to {}",
+                                callerId,
+                                targetId
+                        );
 
-                    return FriendshipResponse.from(friendship, callerId);
+                        return created;
+                    } catch (DataIntegrityViolationException e) {
+                        // A concurrent request created the pair between our lookup
+                        // and insert; the unique constraint is the backstop.
+                        throw new IllegalArgumentException(
+                                "A friend request already exists"
+                        );
+                    }
                 });
+
+        // Notify the recipient live; the sender has the REST response.
+        AfterCommit.run(() -> webSocketGateway.sendToUser(targetId,
+                OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST,
+                        FriendshipResponse.from(friendship, targetId))));
+
+        // Durable notification via the transactional outbox.
+        outboxWriter.writeNotification(OutboxEventType.FRIEND_REQUESTED,
+                "friendship", friendship.getId(),
+                new NotificationCommand(List.of(targetId), callerId,
+                        NotificationType.FRIEND_REQUEST, ReferenceType.FRIENDSHIP,
+                        friendship.getId(), "sent you a friend request", false));
+
+        return FriendshipResponse.from(friendship, callerId);
     }
 
     @Transactional(readOnly = true)
@@ -129,11 +163,24 @@ public class FriendService {
 
         friendship.accept();
 
+        UUID otherUserId = friendship.otherUserId(callerId);
         log.debug(
                 "Friendship accepted between {} and {}",
                 callerId,
-                friendship.otherUserId(callerId)
+                otherUserId
         );
+
+        // Notify the original requester that their request was accepted.
+        AfterCommit.run(() -> webSocketGateway.sendToUser(otherUserId,
+                OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST_ACCEPTED,
+                        FriendshipResponse.from(friendship, otherUserId))));
+
+        // Durable notification via the transactional outbox.
+        outboxWriter.writeNotification(OutboxEventType.FRIEND_REQUEST_ACCEPTED,
+                "friendship", friendship.getId(),
+                new NotificationCommand(List.of(otherUserId), callerId,
+                        NotificationType.FRIEND_REQUEST_ACCEPTED, ReferenceType.FRIENDSHIP,
+                        friendship.getId(), "accepted your friend request", false));
 
         return FriendshipResponse.from(friendship, callerId);
     }
@@ -156,11 +203,17 @@ public class FriendService {
 
         friendship.reject();
 
+        UUID otherUserId = friendship.otherUserId(callerId);
         log.debug(
                 "Friendship declined by {} for request {}",
                 callerId,
                 friendshipId
         );
+
+        // Let the requester clear the pending request from their UI.
+        AfterCommit.run(() -> webSocketGateway.sendToUser(otherUserId,
+                OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST_DECLINED,
+                        FriendshipResponse.from(friendship, otherUserId))));
 
         return FriendshipResponse.from(friendship, callerId);
     }
@@ -182,6 +235,11 @@ public class FriendService {
                 callerId,
                 otherUserId
         );
+
+        // Tell the other user to drop the caller from their friends list.
+        AfterCommit.run(() -> webSocketGateway.sendToUser(otherUserId,
+                OutboundMessage.of(OutboundMessage.Type.FRIEND_REMOVED,
+                        Map.of("userId", callerId))));
     }
 
     private Friendship findAndValidateRecipient(

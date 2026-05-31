@@ -1,7 +1,7 @@
 package com.chatflow.presence.controller;
 
-import com.chatflow.message.entity.Conversation;
-import com.chatflow.message.repository.ConversationRepository;
+import com.chatflow.conversation.repository.ConversationParticipantRepository;
+import com.chatflow.conversation.repository.ConversationRepository;
 import com.chatflow.presence.dto.ConversationPresenceResponse;
 import com.chatflow.presence.dto.PresenceResponse;
 import com.chatflow.presence.service.PresenceService;
@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -19,12 +20,13 @@ public class PresenceController {
 
     private final PresenceService presenceService;
     private final ConversationRepository conversationRepository;
+    private final ConversationParticipantRepository participantRepository;
 
     @GetMapping("/users/{userId}/presence")
     public PresenceResponse getUserPresence(@PathVariable UUID userId, Principal principal) {
         UUID callerId = UUID.fromString(principal.getName());
         if (!callerId.equals(userId)
-                && !conversationRepository.existsConversationBetween(callerId, userId)) {
+                && !participantRepository.existsSharedConversation(callerId, userId)) {
             throw new SecurityException("User " + callerId
                     + " cannot view presence for user " + userId);
         }
@@ -40,17 +42,19 @@ public class PresenceController {
 
         UUID callerId = UUID.fromString(principal.getName());
 
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Conversation not found: " + conversationId));
+        if (!conversationRepository.existsById(conversationId)) {
+            throw new IllegalArgumentException("Conversation not found: " + conversationId);
+        }
 
-        if (!isParticipant(conversation, callerId)) {
+        List<UUID> participantIds = participantRepository.findUserIdsByConversationId(conversationId);
+        if (!participantIds.contains(callerId)) {
             throw new SecurityException(
                     "User " + callerId + " is not a participant in conversation " + conversationId);
         }
 
-        PresenceResponse p1 = buildPresenceResponse(conversation.getParticipantOneId());
-        PresenceResponse p2 = buildPresenceResponse(conversation.getParticipantTwoId());
+        // Two-party presence (the DIRECT case); for groups the first two are reported.
+        PresenceResponse p1 = participantIds.isEmpty() ? null : buildPresenceResponse(participantIds.get(0));
+        PresenceResponse p2 = participantIds.size() < 2 ? null : buildPresenceResponse(participantIds.get(1));
 
         return ConversationPresenceResponse.builder()
                 .participantOne(p1)
@@ -61,10 +65,5 @@ public class PresenceController {
     private PresenceResponse buildPresenceResponse(UUID userId) {
         Instant onlineSince = presenceService.getOnlineSince(userId).orElse(null);
         return PresenceResponse.of(userId, onlineSince != null, onlineSince);
-    }
-
-    private boolean isParticipant(Conversation conversation, UUID userId) {
-        return userId.equals(conversation.getParticipantOneId())
-                || userId.equals(conversation.getParticipantTwoId());
     }
 }

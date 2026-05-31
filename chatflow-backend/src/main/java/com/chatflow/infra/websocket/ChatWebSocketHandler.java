@@ -1,18 +1,13 @@
 package com.chatflow.infra.websocket;
 
 import com.chatflow.config.JwtHandshakeInterceptor;
-import com.chatflow.group.dto.GroupDeliveryAckRequest;
-import com.chatflow.group.dto.GroupReadReceiptRequest;
-import com.chatflow.group.dto.SendGroupMessageRequest;
-import com.chatflow.group.service.GroupChatService;
-import com.chatflow.group.service.GroupDeliveryService;
-import com.chatflow.message.dto.AckRequest;
-import com.chatflow.message.dto.ConversationOpenRequest;
-import com.chatflow.message.dto.SeenRequest;
-import com.chatflow.message.dto.SendMessageRequest;
-import com.chatflow.message.service.ChatService;
-import com.chatflow.message.service.DeliveryService;
-import com.chatflow.message.service.ReplayService;
+import com.chatflow.conversation.dto.ConversationOpenRequest;
+import com.chatflow.conversation.dto.DeliveryAckRequest;
+import com.chatflow.conversation.dto.MarkReadRequest;
+import com.chatflow.conversation.dto.SendMessageRequest;
+import com.chatflow.conversation.service.ChatService;
+import com.chatflow.conversation.service.DeliveryService;
+import com.chatflow.conversation.service.ReplayService;
 import com.chatflow.presence.service.PresenceService;
 import com.chatflow.typing.dto.TypingEventRequest;
 import com.chatflow.typing.service.TypingStateManager;
@@ -37,18 +32,13 @@ import java.util.UUID;
 public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final WebSocketSessionRegistry sessionRegistry;
-    private final WebSocketGateway webSocketGateway;
     private final ObjectMapper objectMapper;
     private final Validator validator;
 
-    // 1:1
+    // Unified chat — one path for DIRECT and GROUP conversations.
     private final ChatService chatService;
     private final DeliveryService deliveryService;
     private final ReplayService replayService;
-
-    // Group
-    private final GroupChatService groupChatService;
-    private final GroupDeliveryService groupDeliveryService;
 
     // Shared
     private final PresenceService presenceService;
@@ -71,11 +61,8 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             presenceService.userConnected(userId);
         }
 
-        // Replay missed 1:1 messages
+        // Replay every undelivered message across all of the user's conversations.
         replayService.replayForUser(userId);
-
-        // Replay missed group messages
-        groupChatService.replayForUser(userId);
 
         log.debug("WebSocket connected userId={} sessionId={}", userId, session.getId());
     }
@@ -138,45 +125,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private void dispatch(WebSocketSession session, UUID userId, InboundMessage inbound)
             throws Exception {
         switch (inbound.getType()) {
-
-            // --- 1:1 ---
             case SEND_MESSAGE -> {
                 SendMessageRequest req = parseAndValidate(inbound, SendMessageRequest.class);
-                chatService.sendMessage(userId, req, inbound.getRequestId());
+                chatService.sendMessage(userId, req.getConversationId(),
+                        req.getClientMessageId(), req.getContent(), inbound.getRequestId());
             }
-            case MESSAGE_ACK -> {
-                AckRequest req = parseAndValidate(inbound, AckRequest.class);
-                deliveryService.ack(userId, req);
+            case MESSAGE_DELIVERED -> {
+                DeliveryAckRequest req = parseAndValidate(inbound, DeliveryAckRequest.class);
+                deliveryService.markDelivered(userId, req.getConversationId(),
+                        req.getUpToSeq(), inbound.getRequestId());
             }
             case CONVERSATION_OPEN -> {
                 ConversationOpenRequest req = parseAndValidate(inbound, ConversationOpenRequest.class);
-                deliveryService.conversationOpen(userId, req);
+                deliveryService.conversationOpen(userId, req.getConversationId());
             }
-            case CONVERSATION_SEEN -> {
-                SeenRequest req = parseAndValidate(inbound, SeenRequest.class);
-                deliveryService.markSeen(userId, req);
+            case MARK_READ -> {
+                MarkReadRequest req = parseAndValidate(inbound, MarkReadRequest.class);
+                deliveryService.markRead(userId, req.getConversationId(), req.getUpToSeq());
             }
-
-            // --- Group ---
-            case GROUP_SEND_MESSAGE -> {
-                SendGroupMessageRequest req = parseAndValidate(inbound, SendGroupMessageRequest.class);
-                groupChatService.sendMessage(userId, req, inbound.getRequestId());
-            }
-            case GROUP_READ_RECEIPT -> {
-                GroupReadReceiptRequest req = parseAndValidate(inbound, GroupReadReceiptRequest.class);
-                groupDeliveryService.markRead(userId, req);
-            }
-            case GROUP_MESSAGE_DELIVERED -> {
-                GroupDeliveryAckRequest req =
-                        parseAndValidate(inbound, GroupDeliveryAckRequest.class);
-
-                groupDeliveryService.markDelivered(
-                        userId,
-                        req,
-                        inbound.getRequestId()
-                );
-            }
-
             case TYPING -> {
                 TypingEventRequest req = parseAndValidate(inbound, TypingEventRequest.class);
                 typingStateManager.handleTyping(req.getConversationId(), userId, req.getTyping());

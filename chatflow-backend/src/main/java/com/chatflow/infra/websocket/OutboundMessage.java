@@ -10,16 +10,11 @@ import java.util.Map;
 public class OutboundMessage {
 
     public enum Type {
-        // 1:1
+        // Chat (unified DIRECT + GROUP)
         MESSAGE,
         MESSAGE_ACK,
         STATUS_UPDATE,
         SEEN_UPDATE,
-        // Group
-        GROUP_MESSAGE,
-        GROUP_MESSAGE_ACK,
-        GROUP_READ_RECEIPT,
-        GROUP_DELIVERY_ACK,
         // Shared
         PRESENCE,
         TYPING,
@@ -28,8 +23,22 @@ public class OutboundMessage {
         // Media
         MEDIA_MESSAGE,
         MEDIA_THUMBNAIL_READY,
-
-        }
+        // Group lifecycle
+        GROUP_CREATED,
+        GROUP_MEMBER_ADDED,
+        GROUP_MEMBER_REMOVED,
+        GROUP_ROLE_CHANGED,
+        GROUP_OWNERSHIP_TRANSFERRED,
+        GROUP_DELETED,
+        // Friend events
+        FRIEND_REQUEST,
+        FRIEND_REQUEST_ACCEPTED,
+        FRIEND_REQUEST_DECLINED,
+        FRIEND_REMOVED,
+        // Notifications
+        NOTIFICATION,
+        NOTIFICATION_READ
+    }
 
     private Type type;
     private String requestId;

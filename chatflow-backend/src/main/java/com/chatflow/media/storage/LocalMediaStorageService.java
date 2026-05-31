@@ -69,13 +69,21 @@ public class LocalMediaStorageService implements MediaStorageService {
             boolean deleted = Files.deleteIfExists(target);
             log.debug("Deleted storageKey={} existed={}", storageKey, deleted);
         } catch (IOException ex) {
-            // Log and continue — caller decides whether to retry
-            log.warn("Failed to delete storageKey={}: {}", storageKey, ex.getMessage());
+            // A missing file is success (idempotent); a real I/O error must
+            // surface so the cleanup job (Phase 7) retries instead of orphaning.
+            throw new StorageException("Failed to delete " + storageKey, ex);
         }
     }
 
     @Override
     public String getUrl(String storageKey) {
+        return buildUrl(storageKey);
+    }
+
+    @Override
+    public String presignedUrl(String storageKey, java.time.Duration ttl) {
+        // Local profile has no presigning; returns the standard URL.
+        // Phase 8 replaces this with a short-lived JWT-signed access URL.
         return buildUrl(storageKey);
     }
 

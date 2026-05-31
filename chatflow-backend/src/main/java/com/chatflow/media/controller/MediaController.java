@@ -2,7 +2,10 @@ package com.chatflow.media.controller;
 
 import com.chatflow.media.dto.MediaMessageResponse;
 import com.chatflow.media.dto.MediaUploadRequest;
+import com.chatflow.media.dto.MediaUrlResponse;
 import com.chatflow.media.entity.MessageType;
+import com.chatflow.media.service.MediaAccessService;
+import com.chatflow.media.service.MediaCleanupService;
 import com.chatflow.media.service.MediaMessageService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,19 +23,10 @@ import java.util.UUID;
 public class MediaController {
 
     private final MediaMessageService mediaMessageService;
+    private final MediaCleanupService mediaCleanupService;
+    private final MediaAccessService mediaAccessService;
 
-    /**
-     * Multipart upload — file + metadata in one request.
-     *
-     * Request:
-     *   POST /api/messages/media?type=IMAGE
-     *   Content-Type: multipart/form-data
-     *   Parts: file (required), chatId or groupId (one required), caption (optional)
-     *
-     * Returns 202 ACCEPTED — the message is persisted with status=UPLOADING.
-     * Storage and delivery happen in Phase 3/4. The client polls getById()
-     * or receives a WebSocket event when status transitions to READY.
-     */
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
     public MediaMessageResponse upload(
@@ -49,5 +43,18 @@ public class MediaController {
     public MediaMessageResponse getById(@PathVariable UUID id, Principal principal) {
         UUID callerId = UUID.fromString(principal.getName());
         return mediaMessageService.getById(callerId, id);
+    }
+
+    @GetMapping("/{id}/url")
+    public MediaUrlResponse getSignedUrl(@PathVariable UUID id, Principal principal) {
+        UUID callerId = UUID.fromString(principal.getName());
+        return mediaAccessService.getSignedUrl(callerId, id);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable UUID id, Principal principal) {
+        UUID callerId = UUID.fromString(principal.getName());
+        mediaCleanupService.deleteMedia(callerId, id);
     }
 }

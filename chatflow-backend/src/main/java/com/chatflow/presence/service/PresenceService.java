@@ -1,9 +1,8 @@
 package com.chatflow.presence.service;
 
+import com.chatflow.conversation.repository.ConversationParticipantRepository;
 import com.chatflow.infra.websocket.OutboundMessage;
 import com.chatflow.infra.websocket.WebSocketGateway;
-import com.chatflow.message.entity.Conversation;
-import com.chatflow.message.repository.ConversationRepository;
 import com.chatflow.presence.dto.PresenceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,18 +19,18 @@ import java.util.UUID;
 public class PresenceService {
 
     private final PresenceStore presenceStore;
-    private final ConversationRepository conversationRepository;
+    private final ConversationParticipantRepository participantRepository;
     private final WebSocketGateway webSocketGateway;
 
     public void userConnected(UUID userId) {
         presenceStore.setOnline(userId);
         Instant onlineSince = presenceStore.getOnlineSince(userId).orElse(Instant.now());
-        broadcastToConversationPartners(userId, PresenceEvent.online(userId, onlineSince));
+        broadcastToContacts(userId, PresenceEvent.online(userId, onlineSince));
     }
 
     public void userDisconnected(UUID userId) {
         presenceStore.setOffline(userId);
-        broadcastToConversationPartners(userId, PresenceEvent.offline(userId));
+        broadcastToContacts(userId, PresenceEvent.offline(userId));
     }
 
     public boolean isOnline(UUID userId) {
@@ -42,20 +41,12 @@ public class PresenceService {
         return presenceStore.getOnlineSince(userId);
     }
 
-    private void broadcastToConversationPartners(UUID userId, PresenceEvent event) {
-        List<Conversation> conversations = conversationRepository
-                .findByParticipantOneIdOrParticipantTwoIdOrderByLastMessageAtDesc(userId, userId);
-
-        conversations.forEach(conversation -> {
-            UUID partnerId = conversation.getParticipantOneId().equals(userId)
-                    ? conversation.getParticipantTwoId()
-                    : conversation.getParticipantOneId();
-
-            webSocketGateway.sendToUser(partnerId,
-                    OutboundMessage.of(OutboundMessage.Type.PRESENCE, event));
-        });
-
-        log.debug("Presence {} sent to {} partners for userId={}",
-                event.getStatus(), conversations.size(), userId);
+    /** Notify everyone who shares a conversation (DIRECT or GROUP) with this user. */
+    private void broadcastToContacts(UUID userId, PresenceEvent event) {
+        List<UUID> contacts = participantRepository.findContactUserIds(userId);
+        contacts.forEach(contactId -> webSocketGateway.sendToUser(contactId,
+                OutboundMessage.of(OutboundMessage.Type.PRESENCE, event)));
+        log.debug("Presence {} sent to {} contacts for userId={}",
+                event.getStatus(), contacts.size(), userId);
     }
 }

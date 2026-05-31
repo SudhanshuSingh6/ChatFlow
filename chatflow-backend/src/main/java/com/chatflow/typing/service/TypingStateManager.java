@@ -1,14 +1,14 @@
 package com.chatflow.typing.service;
 
+import com.chatflow.conversation.repository.ConversationParticipantRepository;
 import com.chatflow.infra.websocket.OutboundMessage;
 import com.chatflow.infra.websocket.WebSocketGateway;
-import com.chatflow.message.entity.Conversation;
-import com.chatflow.message.repository.ConversationRepository;
 import com.chatflow.typing.dto.TypingEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,48 +24,48 @@ public class TypingStateManager {
 
     private final Map<TypingKey, Boolean> typingState = new ConcurrentHashMap<>();
     private final Map<TypingKey, ScheduledFuture<?>> timers = new ConcurrentHashMap<>();
-    private final Map<TypingKey, UUID> receiverMap = new ConcurrentHashMap<>();
+    private final Map<TypingKey, List<UUID>> recipientsMap = new ConcurrentHashMap<>();
 
     private final ScheduledExecutorService scheduler;
     private final WebSocketGateway webSocketGateway;
-    private final ConversationRepository conversationRepository;
+    private final ConversationParticipantRepository participantRepository;
 
     public TypingStateManager(
             @Qualifier("typingTimerExecutor") ScheduledExecutorService scheduler,
             WebSocketGateway webSocketGateway,
-            ConversationRepository conversationRepository) {
+            ConversationParticipantRepository participantRepository) {
         this.scheduler = scheduler;
         this.webSocketGateway = webSocketGateway;
-        this.conversationRepository = conversationRepository;
+        this.participantRepository = participantRepository;
     }
 
     public void handleTyping(UUID conversationId, UUID userId, boolean typing) {
-        Conversation conversation = conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Conversation not found: " + conversationId));
-
-        if (!isParticipant(conversation, userId)) {
+        List<UUID> participantIds = participantRepository.findUserIdsByConversationId(conversationId);
+        if (participantIds.isEmpty()) {
+            throw new IllegalArgumentException("Conversation not found: " + conversationId);
+        }
+        if (!participantIds.contains(userId)) {
             throw new SecurityException("User " + userId
                     + " is not a participant in conversation " + conversationId);
         }
 
-        UUID receiverId = resolveReceiver(conversation, userId);
+        List<UUID> recipients = participantIds.stream().filter(id -> !id.equals(userId)).toList();
         TypingKey key = new TypingKey(conversationId, userId);
-        receiverMap.put(key, receiverId);
+        recipientsMap.put(key, recipients);
 
         if (typing) {
             boolean changed = setState(conversationId, userId, true);
             if (changed) {
-                broadcast(conversationId, userId, receiverId, true);
+                broadcast(conversationId, userId, recipients, true);
             }
             scheduleExpiry(conversationId, userId,
                     () -> onTimerExpired(conversationId, userId));
         } else {
             boolean changed = setState(conversationId, userId, false);
             cancelTimer(conversationId, userId);
-            receiverMap.remove(key);
+            recipientsMap.remove(key);
             if (changed) {
-                broadcast(conversationId, userId, receiverId, false);
+                broadcast(conversationId, userId, recipients, false);
             }
         }
     }
@@ -77,9 +77,9 @@ public class TypingStateManager {
                 .forEach(key -> {
                     boolean wasTyping = Boolean.TRUE.equals(typingState.remove(key));
                     cancelTimer(key.conversationId(), userId);
-                    UUID receiverId = receiverMap.remove(key);
-                    if (wasTyping && receiverId != null) {
-                        broadcast(key.conversationId(), userId, receiverId, false);
+                    List<UUID> recipients = recipientsMap.remove(key);
+                    if (wasTyping && recipients != null) {
+                        broadcast(key.conversationId(), userId, recipients, false);
                     }
                 });
 
@@ -95,14 +95,14 @@ public class TypingStateManager {
         boolean wasTyping = Boolean.TRUE.equals(typingState.remove(key));
         timers.remove(key);
 
-        UUID receiverId = receiverMap.remove(key);
-        if (wasTyping && receiverId != null) {
-            broadcast(conversationId, userId, receiverId, false);
+        List<UUID> recipients = recipientsMap.remove(key);
+        if (wasTyping && recipients != null) {
+            broadcast(conversationId, userId, recipients, false);
         }
     }
 
-    private void broadcast(UUID conversationId, UUID userId, UUID receiverId, boolean typing) {
-        webSocketGateway.sendToUser(receiverId,
+    private void broadcast(UUID conversationId, UUID userId, List<UUID> recipients, boolean typing) {
+        webSocketGateway.sendToUsers(recipients,
                 OutboundMessage.of(OutboundMessage.Type.TYPING,
                         TypingEvent.of(conversationId, userId, typing)));
     }
@@ -133,17 +133,6 @@ public class TypingStateManager {
         if (timer != null) {
             timer.cancel(false);
         }
-    }
-
-    private boolean isParticipant(Conversation conversation, UUID userId) {
-        return userId.equals(conversation.getParticipantOneId())
-                || userId.equals(conversation.getParticipantTwoId());
-    }
-
-    private UUID resolveReceiver(Conversation conversation, UUID userId) {
-        return userId.equals(conversation.getParticipantOneId())
-                ? conversation.getParticipantTwoId()
-                : conversation.getParticipantOneId();
     }
 
     record TypingKey(UUID conversationId, UUID userId) {}

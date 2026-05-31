@@ -6,13 +6,18 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+/**
+ * Detail row for a media attachment. In the unified model a media message is a
+ * {@code messages} row of {@code type=MEDIA} plus this detail row linked by
+ * {@link #messageId}; it no longer carries its own conversation/group linkage
+ * (that lives on the parent message).
+ */
 @Entity
 @Table(name = "media_messages", indexes = {
-        @Index(name = "idx_media_sender",       columnList = "senderId"),
-        @Index(name = "idx_media_conversation",  columnList = "conversationId"),
-        @Index(name = "idx_media_group",         columnList = "groupId"),
-        @Index(name = "idx_media_status",        columnList = "status"),
-        @Index(name = "idx_media_created",       columnList = "createdAt")
+        @Index(name = "idx_media_message",  columnList = "message_id"),
+        @Index(name = "idx_media_sender",   columnList = "sender_id"),
+        @Index(name = "idx_media_status",   columnList = "status"),
+        @Index(name = "idx_media_created",  columnList = "created_at")
 })
 @Data
 @Builder
@@ -24,22 +29,15 @@ public class MediaMessage {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, updatable = false)
+    /** The parent {@code messages} row (type=MEDIA) this attachment belongs to. */
+    @Column(name = "message_id", nullable = false, updatable = false)
+    private UUID messageId;
+
+    @Column(name = "sender_id", nullable = false, updatable = false)
     private UUID senderId;
 
-    /**
-     * Exactly one of conversationId or groupId must be non-null.
-     * A CHECK constraint is enforced at the service layer — JPA does not
-     * support XOR constraints natively.
-     */
-    @Column(updatable = false)
-    private UUID conversationId;
-
-    @Column(updatable = false)
-    private UUID groupId;
-
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, updatable = false)
+    @Column(name = "message_type", nullable = false, updatable = false)
     private MessageType messageType;
 
     @Enumerated(EnumType.STRING)
@@ -48,36 +46,32 @@ public class MediaMessage {
     private MediaStatus status = MediaStatus.UPLOADING;
 
     /** Public URL (or storage key) for the media object */
-    @Column(length = 1024)
+    @Column(name = "media_url", length = 1024)
     private String mediaUrl;
 
-    /** Thumbnail URL — populated asynchronously in Phase 6 */
-    @Column(length = 1024)
+    /** Thumbnail URL — populated asynchronously by the processing pipeline */
+    @Column(name = "thumbnail_url", length = 1024)
     private String thumbnailUrl;
 
     /**
      * MIME type detected from the file's magic bytes — NOT trusted from
-     * the client Content-Type header. Set after validation in Phase 2.
+     * the client Content-Type header.
      */
-    @Column(nullable = false, updatable = false, length = 100)
+    @Column(name = "mime_type", nullable = false, updatable = false, length = 100)
     private String mimeType;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "file_size", nullable = false, updatable = false)
     private Long fileSize;
 
     /**
      * UUID-based storage filename — never the original. Stored here so
      * the storage object can be deleted without scanning the URL.
      */
-    @Column(nullable = false, updatable = false, length = 255)
+    @Column(name = "storage_key", nullable = false, updatable = false, length = 255)
     private String storageKey;
 
-    /**
-     * Original filename from the upload — stored for display only.
-     * Never used as a file system path. Sanitised and truncated at the
-     * service layer before persistence.
-     */
-    @Column(updatable = false, length = 255)
+    /** Original filename from the upload — stored for display only, sanitised. */
+    @Column(name = "original_file_name", updatable = false, length = 255)
     private String originalFileName;
 
     @Column(length = 1000)
@@ -87,10 +81,10 @@ public class MediaMessage {
     @Column(nullable = false)
     private boolean deleted = false;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @PrePersist

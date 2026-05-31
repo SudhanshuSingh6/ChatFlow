@@ -1,6 +1,6 @@
 package com.chatflow.presence.service;
 
-import com.chatflow.message.service.ReplayService;
+import com.chatflow.conversation.service.ReplayService;
 import com.chatflow.typing.service.TypingStateManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

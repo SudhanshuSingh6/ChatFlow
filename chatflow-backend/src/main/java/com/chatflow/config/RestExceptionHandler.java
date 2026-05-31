@@ -93,7 +93,7 @@ public class RestExceptionHandler {
     @ExceptionHandler(HandlerMethodValidationException.class)
     public ProblemDetail handleMethodValidation(HandlerMethodValidationException ex,
                                                 HttpServletRequest request) {
-        List<String> errors = ex.getAllValidationResults().stream()
+        List<String> errors = ex.getParameterValidationResults().stream()
                 .flatMap(r -> r.getResolvableErrors().stream())
                 .map(this::formatResolvableError)
                 .toList();
