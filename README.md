@@ -17,22 +17,22 @@
 
 ## Overview
 
-ChatFlow is a resume-grade real-time chat backend built with Spring Boot. It supports direct conversations, group conversations, friend requests, role-based group administration, media messaging, notifications, typing indicators, presence, message search, missed-message replay, and cross-instance WebSocket fanout.
+ChatFlow is a resume-grade real-time chat backend built with Spring Boot. It supports direct conversations, group conversations, friend requests, role-based group administration, media messaging, notifications, typing indicators, presence, message replay, and cross-instance WebSocket fanout.
 
 The backend uses a unified conversation model: a direct chat and a group chat share the same message pipeline. The only difference is how many participants belong to the conversation.
 
 ```mermaid
 flowchart LR
-  Client["Clients (REST + WebSocket)"] --> App["ChatFlow Backend"]
-  App --> Postgres["PostgreSQL"]
-  App --> Redis["Redis Pub/Sub"]
-  App --> Storage["Local Disk or MinIO/S3"]
+  Client[Clients: REST + WebSocket] --> App[Spring Boot Backend]
+  App --> Postgres[(PostgreSQL)]
+  App --> Redis[(Redis Pub/Sub)]
+  App --> Storage[(Local Disk or MinIO/S3)]
 
-  App --> Auth["JWT Auth"]
-  App --> Chat["Unified Conversations"]
-  App --> Media["Media Pipeline"]
-  App --> Outbox["Transactional Outbox"]
-  Outbox --> Notif["Persistent Notifications"]
+  App --> Auth[JWT Auth]
+  App --> Chat[Unified Conversations]
+  App --> Media[Media Pipeline]
+  App --> Outbox[Transactional Outbox]
+  Outbox --> Notif[Notifications]
 ```
 
 ## Resume Highlights
@@ -41,7 +41,7 @@ flowchart LR
 - Implemented WebSocket messaging with Redis Pub/Sub so multiple backend instances can deliver live events to users connected on different servers.
 - Added a transactional outbox for durable notification/event processing.
 - Secured REST APIs and WebSocket handshakes with JWT authentication.
-- Developed media messaging with validation, local or S3-compatible storage, thumbnail processing, cleanup, and access-controlled retrieval.
+- Developed media messaging with validation, local/S3-compatible storage, thumbnail processing, cleanup, and access-controlled retrieval.
 
 ## Tech Stack
 
@@ -68,93 +68,85 @@ flowchart LR
 - Offline replay of undelivered messages on reconnect.
 - Typing indicators and presence events.
 - Persistent notifications with unread counts and mark-read APIs.
-- Media upload with MIME/type validation, thumbnails, access-controlled URLs, and cleanup retry.
+- Media upload with MIME/type validation, thumbnails, signed access URLs, and cleanup retry.
 - Message search across all conversations the caller belongs to.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-  subgraph Client["Clients"]
-    REST["REST API"]
-    WS["WebSocket /ws"]
+  subgraph Client
+    REST[REST API]
+    WS[WebSocket /ws]
   end
 
   subgraph Backend["ChatFlow Backend Instance"]
-    Security["JWT Security"]
-    Controllers["REST Controllers"]
-    Handler["ChatWebSocketHandler"]
-    Services["Feature Services"]
-    Gateway["WebSocketGateway"]
-    OutboxWriter["OutboxWriter"]
-    OutboxPoller["OutboxPoller"]
-    Notification["NotificationService"]
-    Relay["CrossServerRelay"]
-    Sessions["Local WebSocket Sessions"]
+    Security[JWT Security]
+    Handler[ChatWebSocketHandler]
+    Gateway[WebSocketGateway]
+    Chat[ChatService]
+    Delivery[DeliveryService]
+    Conversation[ConversationService]
+    Media[MediaMessageService]
+    Notification[NotificationService]
+    Outbox[Outbox Poller]
   end
 
   REST --> Security
   WS --> Security
-  Security --> Controllers
   Security --> Handler
-  Controllers --> Services
-  Handler --> Services
+  Security --> Conversation
+  Handler --> Chat
+  Handler --> Delivery
+  Chat --> Gateway
+  Delivery --> Gateway
+  Media --> Gateway
+  Chat --> Outbox
+  Media --> Outbox
+  Outbox --> Notification
 
-  Services --> DB["PostgreSQL"]
-  Services --> Storage["Local Disk or MinIO/S3"]
-  Services --> Gateway
-  Services --> OutboxWriter
-  OutboxWriter --> DB
-  OutboxPoller --> DB
-  OutboxPoller --> Notification
-  Notification --> Gateway
-
-  Gateway --> Sessions
-  Gateway --> Relay
-  Relay <--> Redis["Redis channel: chat:relay"]
+  Backend --> DB[(PostgreSQL)]
+  Gateway --> Redis[(Redis Pub/Sub)]
+  Media --> S3[(Local Disk or MinIO/S3)]
 ```
 
 ### Message Flow
 
 ```mermaid
 sequenceDiagram
-  participant C as Sender Client
+  participant C as Client
   participant WS as ChatWebSocketHandler
   participant S as ChatService
   participant DB as PostgreSQL
   participant G as WebSocketGateway
-  participant L as Local Recipient Clients
-  participant R as Redis Relay
-  participant B as Other Backend Instance
-  participant O as Remote Recipient Client
+  participant R as Redis Pub/Sub
+  participant O as Other Clients
 
   C->>WS: SEND_MESSAGE
   WS->>S: sendMessage(userId, conversationId, payload)
   S->>DB: lock conversation and verify membership
-  S->>DB: insert message with next sequence_number
-  S->>DB: advance sender last_read_seq
-  S->>DB: persist notification outbox event
+  S->>DB: insert message with next sequence number
+  S->>DB: advance sender read cursor
+  S->>DB: write outbox notification event
   DB-->>S: commit
-  S->>G: after commit send MESSAGE_ACK and MESSAGE
-  G-->>C: MESSAGE_ACK if sender session is local
-  G-->>L: MESSAGE if recipient sessions are local
-  G->>R: publish CrossServerMessage per target user
-  R-->>B: deliver relay event
-  B-->>O: MESSAGE if target user is connected there
+  S->>G: after commit: MESSAGE_ACK to sender
+  S->>G: after commit: MESSAGE to recipients
+  G->>O: local WebSocket delivery
+  G->>R: publish for other backend instances
 ```
 
 ### Redis Pub/Sub Fanout
 
 ```mermaid
 flowchart LR
-  A["Backend A (publisher)"] -->|"publish sourceInstanceId + targetUserId + frame"| Bus["Redis channel: chat:relay"]
-  Bus --> ASub["Backend A subscriber"]
-  Bus --> BSub["Backend B subscriber"]
-  Bus --> CSub["Backend C subscriber"]
+  A[Backend A] -->|publish targetUserId + frame| Redis[(chat:relay)]
+  Redis --> A
+  Redis --> B[Backend B]
+  Redis --> C[Backend C]
 
-  ASub -->|"sourceInstanceId matches"| Ignore["Ignore self-published event"]
-  BSub -->|"target user connected here"| Bob["Target user WebSocket"]
-  CSub -->|"target user not connected here"| Noop["No-op"]
+  A -->|ignore own sourceInstanceId| ANoop[No duplicate local send]
+  B -->|if target user is local| Bob[Bob's WebSocket]
+  C -->|if target user not local| Noop[No-op]
 ```
 
 Redis is used for live cross-instance fanout. It is not the durable message store. PostgreSQL stores messages, and `ReplayService` uses each participant's `last_delivered_seq` to replay missed messages after reconnect.
@@ -163,27 +155,11 @@ Redis is used for live cross-instance fanout. It is not the durable message stor
 
 ```mermaid
 erDiagram
-  USERS ||--o{ FRIENDSHIPS : requests
-  USERS ||--o{ CONVERSATION_PARTICIPANTS : joins
+  USERS ||--o{ FRIENDSHIPS : participates
   CONVERSATIONS ||--o{ CONVERSATION_PARTICIPANTS : has
   CONVERSATIONS ||--o{ MESSAGES : contains
-  USERS ||--o{ MESSAGES : sends
-  MESSAGES ||--o| MEDIA_MESSAGES : may_attach
+  MESSAGES ||--o| MEDIA_MESSAGES : attaches
   USERS ||--o{ NOTIFICATIONS : receives
-
-  USERS {
-    uuid id
-    string username
-    timestamp created_at
-  }
-
-  FRIENDSHIPS {
-    uuid id
-    uuid user_one_id
-    uuid user_two_id
-    uuid initiator_id
-    string status
-  }
 
   CONVERSATIONS {
     uuid id
@@ -210,24 +186,6 @@ erDiagram
     bigint sequence_number
     timestamp deleted_at
   }
-
-  MEDIA_MESSAGES {
-    uuid id
-    uuid message_id
-    string message_type
-    string status
-    string storage_key
-    boolean deleted
-  }
-
-  NOTIFICATIONS {
-    uuid id
-    uuid recipient_id
-    uuid actor_id
-    string type
-    boolean read
-    timestamp created_at
-  }
 ```
 
 The important design choice is that delivery/read state is not stored on every message. It is stored as participant cursors:
@@ -247,7 +205,7 @@ chatflow-backend/
     auth/              JWT auth, login, registration
     conversation/      Direct chats, group chats, messages, receipts, search
     friend/            Friend requests and friendship lifecycle
-    media/             Uploads, validation, storage, thumbnails, access URLs
+    media/             Uploads, validation, storage, thumbnails, signed URLs
     notification/      Persistent notification feed and unread counts
     presence/          Online/offline presence
     typing/            Typing state and expiry
@@ -267,13 +225,13 @@ chatflow-backend/
 | Area | Endpoint |
 | --- | --- |
 | Auth | `POST /api/auth/register`, `POST /api/auth/login` |
-| Friends | `POST /api/friends/requests`, `GET /api/friends/requests/received`, `GET /api/friends/requests/sent`, `POST /api/friends/requests/{friendshipId}/accept`, `POST /api/friends/requests/{friendshipId}/decline`, `GET /api/friends`, `DELETE /api/friends/{userId}` |
-| Conversations | `POST /api/conversations/direct`, `POST /api/conversations/group`, `GET /api/conversations`, `GET /api/conversations/{conversationId}` |
-| Messages | `GET /api/conversations/{conversationId}/messages`, `GET /api/conversations/{conversationId}/messages/after` |
-| Group Admin | `POST /api/conversations/{conversationId}/participants`, `DELETE /api/conversations/{conversationId}/participants/{userId}`, `PUT /api/conversations/{conversationId}/participants/{userId}/role`, `POST /api/conversations/{conversationId}/transfer-ownership`, `DELETE /api/conversations/{conversationId}` |
-| Search | `GET /api/messages/search?query=...` |
-| Media | `POST /api/messages/media`, `GET /api/messages/media/{id}`, `GET /api/messages/media/{id}/url`, `DELETE /api/messages/media/{id}` |
-| Notifications | `GET /api/notifications`, `GET /api/notifications/unread-count`, `POST /api/notifications/{id}/read`, `POST /api/notifications/read-all`, `DELETE /api/notifications/{id}` |
+| Friends | `POST /api/friends/requests`, `GET /api/friends`, `DELETE /api/friends/{userId}` |
+| Conversations | `POST /api/conversations/direct`, `POST /api/conversations/group`, `GET /api/conversations` |
+| Messages | `GET /api/conversations/{id}/messages`, `GET /api/conversations/{id}/messages/after` |
+| Group Admin | `POST /api/conversations/{id}/participants`, `PUT /api/conversations/{id}/participants/{userId}/role`, `POST /api/conversations/{id}/transfer-ownership` |
+| Search | `GET /api/messages/search` |
+| Media | `POST /api/messages/media`, `GET /api/messages/media/{id}`, `GET /api/messages/media/{id}/url` |
+| Notifications | `GET /api/notifications`, `GET /api/notifications/unread-count`, `POST /api/notifications/{id}/read` |
 | Presence | `GET /api/users/{userId}/presence`, `GET /api/conversations/{conversationId}/presence` |
 | WebSocket | `/ws?token=<JWT>` |
 
@@ -352,28 +310,19 @@ PONG
 
 ```bash
 cd chatflow-backend
-docker compose up -d postgres redis
+docker compose up -d postgres redis minio
 ```
 
-This starts the required local services:
+This starts:
 
 | Service | URL / Port | Default Credentials |
 | --- | --- | --- |
 | PostgreSQL | `localhost:5432` | `chatflow / chatflow` |
 | Redis | `localhost:6379` | none |
-
-By default, the backend uses local disk storage (`./uploads`). Start MinIO only when you want to run with the `s3` profile:
-
-```bash
-docker compose up -d minio
-```
-
-Optional MinIO services:
-
-| Service | URL / Port | Default Credentials |
-| --- | --- | --- |
 | MinIO API | `http://localhost:9000` | `minioadmin / minioadmin` |
 | MinIO Console | `http://localhost:9001` | `minioadmin / minioadmin` |
+
+By default, the backend uses local disk storage (`./uploads`). MinIO is only required when running with the `s3` profile.
 
 ### 2. Run the backend
 
@@ -422,12 +371,6 @@ The Spring context test uses the configured PostgreSQL datasource, so keep the P
 java -jar target/chatflow-backend-0.0.1-SNAPSHOT.jar
 ```
 
-If you only want to build the jar without running tests:
-
-```bash
-./mvnw clean package -DskipTests
-```
-
 ## Configuration
 
 Main config file:
@@ -450,20 +393,3 @@ Common environment variables:
 | `SPRING_PROFILES_ACTIVE` | Use `s3` for MinIO/S3 storage | local storage |
 | `FFMPEG_PATH` | FFmpeg binary path | `ffmpeg` |
 
-## Notes For Reviewers
-
-- The backend intentionally uses one `conversation` model for private and group messaging.
-- Redis Pub/Sub is for live fanout across backend instances.
-- PostgreSQL is the source of truth for messages, participants, notifications, and media metadata.
-- The transactional outbox makes notification/event processing retryable and durable.
-- Media objects are validated before storage and retrieved only after access checks.
-
-## Resume Bullets
-
-```latex
-\resumeItem{Built a \textbf{real-time chat platform} with \textbf{friend requests}, \textbf{private messaging}, \textbf{group chats}, \textbf{notifications}, and \textbf{role-based group administration} using \textbf{Spring Boot}, \textbf{WebSocket}, and \textbf{PostgreSQL}.}
-
-\resumeItem{Implemented \textbf{Redis Pub/Sub} for cross-instance WebSocket fanout and the \textbf{Transactional Outbox Pattern} for durable notification/event processing, improving \textbf{scalability}, \textbf{reliability}, and \textbf{fault tolerance}.}
-
-\resumeItem{Developed \textbf{JWT-secured APIs} and \textbf{media messaging} with \textbf{MinIO/S3-compatible storage}, including \textbf{file validation}, \textbf{validated uploads}, thumbnail processing, and \textbf{access-controlled retrieval}.}
-```
