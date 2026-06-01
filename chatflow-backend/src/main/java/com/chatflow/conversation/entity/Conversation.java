@@ -69,6 +69,14 @@ public class Conversation {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    /**
+     * Soft-delete marker. Only set for GROUP conversations the owner has deleted;
+     * the row is hidden from listings and physically purged later by the daily
+     * cleanup job. DIRECT conversations are never soft-deleted.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();
@@ -109,6 +117,15 @@ public class Conversation {
 
     public boolean isGroup() {
         return type == ConversationType.GROUP;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /** Soft-delete this conversation; the row is retained until the cleanup job purges it. */
+    public void softDelete() {
+        this.deletedAt = Instant.now();
     }
 
     /** Update the denormalized last-message fields after a new message lands. */

@@ -65,6 +65,14 @@ app:
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
     presigned-url-expiry-minutes: 60
 
+  # Daily retention cleanup — physically purges soft-deleted rows past their window.
+  cleanup:
+    interval-ms: 86400000          # how often the cleanup job runs (daily)
+    retention:
+      messages-days: 30
+      groups-days: 30
+      notifications-days: 30
+
 management:
   endpoints:
     web:

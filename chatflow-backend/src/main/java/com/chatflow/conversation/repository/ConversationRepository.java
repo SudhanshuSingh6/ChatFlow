@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +27,13 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
     @Query("SELECT c FROM Conversation c " +
             "WHERE c.id IN (SELECT p.conversationId FROM ConversationParticipant p " +
             "               WHERE p.userId = :userId) " +
+            "AND c.deletedAt IS NULL " +
             "ORDER BY c.lastMessageAt DESC NULLS LAST")
     List<Conversation> findAllForUser(@Param("userId") UUID userId);
+
+    /** Ids of GROUP conversations soft-deleted before the cutoff — fed to the cleanup cascade. */
+    @Query("SELECT c.id FROM Conversation c " +
+            "WHERE c.type = com.chatflow.conversation.entity.ConversationType.GROUP " +
+            "AND c.deletedAt IS NOT NULL AND c.deletedAt < :cutoff")
+    List<UUID> findGroupIdsToPurge(@Param("cutoff") Instant cutoff);
 }

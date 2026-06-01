@@ -34,6 +34,17 @@ public interface MessageRepository extends JpaRepository<Message, UUID> {
     @Query("DELETE FROM Message m WHERE m.conversationId = :conversationId")
     int deleteByConversationId(@Param("conversationId") UUID conversationId);
 
+    // ---- retention purge (hard-delete soft-deleted tombstones) ----
+
+    /**
+     * Hard-deletes message tombstones whose {@code deletedAt} is older than the cutoff.
+     * The {@code < :cutoff} predicate already excludes rows with a null {@code deletedAt},
+     * so only soft-deleted rows are removed.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM Message m WHERE m.deletedAt < :cutoff")
+    int purgeDeletedBefore(@Param("cutoff") Instant cutoff);
+
     // ---- history paging ----
 
     @Query("SELECT m FROM Message m " +

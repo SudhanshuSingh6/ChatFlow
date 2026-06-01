@@ -294,10 +294,11 @@ public class ConversationService {
         requireOwner(conversationId, callerId);
 
         List<UUID> recipients = recipientsExcept(conversationId, callerId);
-        messageRepository.deleteByConversationId(conversationId);
-        participantRepository.deleteByConversationId(conversationId);
-        conversationRepository.delete(group);
-        log.debug("Deleted group {} by owner {}", conversationId, callerId);
+        // Soft delete: hide the group now; the daily cleanup job cascades the physical
+        // removal of messages, participants, related notifications, and this row later.
+        group.softDelete();
+        conversationRepository.save(group);
+        log.debug("Soft-deleted group {} by owner {}", conversationId, callerId);
 
         AfterCommit.run(() -> webSocketGateway.sendToUsers(recipients,
                 OutboundMessage.of(OutboundMessage.Type.GROUP_DELETED,

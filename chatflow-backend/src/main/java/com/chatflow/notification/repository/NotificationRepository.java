@@ -19,6 +19,7 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     @Query("""
             select n from Notification n
             where n.recipientId = :recipientId
+              and n.deletedAt is null
               and (:cursor is null or n.createdAt < :cursor)
             order by n.createdAt desc
             """)
@@ -27,10 +28,14 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
                                 Pageable pageable);
 
 
-    long countByRecipientIdAndReadFalse(UUID recipientId);
+    @Query("""
+            select count(n) from Notification n
+            where n.recipientId = :recipientId and n.read = false and n.deletedAt is null
+            """)
+    long countByRecipientIdAndReadFalse(@Param("recipientId") UUID recipientId);
 
 
-    Optional<Notification> findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalse(
+    Optional<Notification> findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalseAndDeletedAtIsNull(
             UUID recipientId, UUID referenceId, NotificationType type);
 
 
@@ -53,5 +58,32 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     int markAllRead(@Param("recipientId") UUID recipientId,
                     @Param("now") Instant now);
 
-    int deleteByIdAndRecipientId(UUID id, UUID recipientId);
+    @Modifying
+    @Query("""
+            update Notification n
+               set n.deletedAt = :now
+             where n.id = :id and n.recipientId = :recipientId and n.deletedAt is null
+            """)
+    int softDelete(@Param("id") UUID id,
+                   @Param("recipientId") UUID recipientId,
+                   @Param("now") Instant now);
+
+    // ---- retention purge ----
+
+    /** Hard-deletes notifications soft-deleted before the cutoff. */
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM Notification n WHERE n.deletedAt < :cutoff")
+    int purgeDeletedBefore(@Param("cutoff") Instant cutoff);
+
+    /**
+     * Hard-deletes every notification scoped to a conversation — used by the group
+     * cleanup cascade. All conversation-scoped notifications (NEW_MESSAGE and the
+     * GROUP_* types) carry {@code referenceType = CONVERSATION} and
+     * {@code referenceId = conversationId}.
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM Notification n " +
+            "WHERE n.referenceType = com.chatflow.notification.entity.ReferenceType.CONVERSATION " +
+            "AND n.referenceId = :conversationId")
+    int deleteByConversation(@Param("conversationId") UUID conversationId);
 }

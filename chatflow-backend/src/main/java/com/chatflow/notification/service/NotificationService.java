@@ -44,7 +44,7 @@ public class NotificationService {
 
     private Notification upsert(UUID recipientId, NotificationCommand command) {
         if (command.coalesce() && command.referenceId() != null) {
-            var existing = repository.findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalse(
+            var existing = repository.findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalseAndDeletedAtIsNull(
                     recipientId, command.referenceId(), command.type());
             if (existing.isPresent()) {
                 Notification n = existing.get();
@@ -65,7 +65,7 @@ public class NotificationService {
             return repository.save(n);
         } catch (DataIntegrityViolationException e) {
             // A concurrent event coalesced first; retry the lookup once.
-            return repository.findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalse(
+            return repository.findFirstByRecipientIdAndReferenceIdAndTypeAndReadFalseAndDeletedAtIsNull(
                             recipientId, command.referenceId(), command.type())
                     .map(found -> {
                         found.coalesce(command.preview());
@@ -112,7 +112,11 @@ public class NotificationService {
 
     @Transactional
     public void delete(UUID recipientId, UUID notificationId) {
-        repository.deleteByIdAndRecipientId(notificationId, recipientId);
+        int updated = repository.softDelete(notificationId, recipientId, Instant.now());
+        if (updated > 0) {
+            // A dismissed unread notification drops out of the unread count — refresh badges.
+            notifyReadState(recipientId);
+        }
     }
 
     /** Push the new unread count so other devices update their badge live. */

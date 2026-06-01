@@ -66,6 +66,14 @@ public class Notification {
     @Column(name = "read_at")
     private Instant readAt;
 
+    /**
+     * Soft-delete marker. Set when the recipient dismisses the notification; the row
+     * is hidden from the feed and unread count, and physically purged later by the
+     * daily cleanup job.
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @PrePersist
     void prePersist() {
         if (createdAt == null) {
@@ -78,6 +86,15 @@ public class Notification {
             read = true;
             readAt = Instant.now();
         }
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /** Soft-delete this notification; the row is retained until the cleanup job purges it. */
+    public void softDelete() {
+        this.deletedAt = Instant.now();
     }
 
     public void coalesce(String newPreview) {
