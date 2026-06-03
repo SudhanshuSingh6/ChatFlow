@@ -3,12 +3,15 @@ package com.chatflow.auth.service;
 import com.chatflow.auth.dto.AuthResponse;
 import com.chatflow.auth.dto.LoginRequest;
 import com.chatflow.auth.dto.RegisterRequest;
+import com.chatflow.auth.security.AuthenticatedUser;
 import com.chatflow.auth.security.JwtService;
 import com.chatflow.user.entity.User;
 import com.chatflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,11 +24,12 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
-            throw new IllegalArgumentException("Username already taken: " + request.getUsername());
+            throw new IllegalArgumentException("Username is not available");
         }
 
         User user = User.builder()
@@ -44,22 +48,20 @@ public class AuthService {
                 .build();
     }
 
+
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        Authentication authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BadCredentialsException("Invalid credentials");
-        }
+        AuthenticatedUser principal = (AuthenticatedUser) authentication.getPrincipal();
+        log.debug("Login successful for user id={}", principal.id());
 
-        log.debug("Login successful for user id={}", user.getId());
-
-        String token = jwtService.generateToken(user.getId());
+        String token = jwtService.generateToken(principal.id());
         return AuthResponse.builder()
                 .token(token)
-                .userId(user.getId())
-                .username(user.getUsername())
+                .userId(principal.id())
+                .username(principal.username())
                 .build();
     }
 }

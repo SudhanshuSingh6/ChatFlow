@@ -1,6 +1,9 @@
-package com.chatflow.infra.websocket;
+package com.chatflow.realtime;
 
-import com.chatflow.config.JwtHandshakeInterceptor;
+import com.chatflow.auth.security.JwtHandshakeInterceptor;
+import com.chatflow.infra.websocket.InboundMessage;
+import com.chatflow.infra.websocket.OutboundMessage;
+import com.chatflow.infra.websocket.WebSocketSessionRegistry;
 import com.chatflow.conversation.dto.ConversationOpenRequest;
 import com.chatflow.conversation.dto.DeliveryAckRequest;
 import com.chatflow.conversation.dto.MarkReadRequest;

@@ -1,5 +1,6 @@
 package com.chatflow.conversation.service;
 
+import com.chatflow.conversation.search.MessageEmbeddingRepository;
 import com.chatflow.conversation.repository.ConversationParticipantRepository;
 import com.chatflow.conversation.repository.ConversationRepository;
 import com.chatflow.conversation.repository.MessageRepository;
@@ -26,12 +27,13 @@ class DailyCleanupServiceTest {
     private final ConversationRepository conversationRepository = mock(ConversationRepository.class);
     private final ConversationParticipantRepository participantRepository =
             mock(ConversationParticipantRepository.class);
+    private final MessageEmbeddingRepository embeddingRepository = mock(MessageEmbeddingRepository.class);
     // A bare mock manager makes TransactionTemplate run callbacks inline (getTransaction → null).
     private final PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
 
     private final DailyCleanupService service = new DailyCleanupService(
             messageRepository, notificationRepository, conversationRepository,
-            participantRepository, txManager);
+            participantRepository, embeddingRepository, txManager);
 
     {
         ReflectionTestUtils.setField(service, "messageRetentionDays", 30L);
@@ -81,8 +83,10 @@ class DailyCleanupServiceTest {
 
         service.purgeGroups();
 
-        InOrder inOrder = inOrder(notificationRepository, messageRepository,
+        InOrder inOrder = inOrder(embeddingRepository, notificationRepository, messageRepository,
                 participantRepository, conversationRepository);
+        // Embeddings must be deleted before messages (FK on message_embeddings.message_id).
+        inOrder.verify(embeddingRepository).deleteForConversation(groupId);
         inOrder.verify(notificationRepository).deleteByConversation(groupId);
         inOrder.verify(messageRepository).deleteByConversationId(groupId);
         inOrder.verify(participantRepository).deleteByConversationId(groupId);

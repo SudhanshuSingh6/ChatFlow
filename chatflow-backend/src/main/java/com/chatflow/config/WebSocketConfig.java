@@ -1,6 +1,7 @@
 package com.chatflow.config;
 
-import com.chatflow.infra.websocket.ChatWebSocketHandler;
+import com.chatflow.auth.security.JwtHandshakeInterceptor;
+import com.chatflow.realtime.ChatWebSocketHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;

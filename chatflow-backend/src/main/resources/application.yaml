@@ -17,6 +17,16 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      # Outbox events are plain JSON strings (provider-neutral, no type headers).
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
   servlet:
     multipart:
       enabled: true
@@ -33,6 +43,17 @@ app:
     idle-timeout-seconds: 90
     ping-interval-seconds: 30
     ping-interval-ms: 30000
+
+  # Transactional outbox transport. `in-process` (default) dispatches in-JVM, unchanged
+  # legacy behavior. `kafka` publishes each event to the broker and consumes it back via
+  # an in-app listener — the event backbone the microservices split builds on.
+  outbox:
+    transport: ${APP_OUTBOX_TRANSPORT:in-process}
+    poll-interval-ms: 1000
+    kafka:
+      topic: chatflow.outbox.events
+      consumer-group: chatflow-outbox
+      send-timeout-seconds: 10
 
   media:
     upload-dir: ${MEDIA_UPLOAD_DIR:./uploads}
@@ -64,6 +85,23 @@ app:
     region: ${S3_REGION:us-east-1}
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
     presigned-url-expiry-minutes: 60
+
+  # AI features — semantic search / summarizer / RAG.
+  ai:
+    embedding:
+      base-url: ${AI_EMBEDDING_BASE_URL:https://api.openai.com/v1}
+      api-key: ${AI_EMBEDDING_API_KEY:}
+      model: ${AI_EMBEDDING_MODEL:text-embedding-3-small}
+      dimensions: 1536        # must match the message_embeddings.embedding column
+      backfill:
+        enabled: ${AI_EMBEDDING_BACKFILL_ENABLED:true}
+        interval-ms: 60000    # how often to enqueue a backfill batch
+        batch-size: 200
+    chat:
+      provider: ${AI_CHAT_PROVIDER:anthropic}
+      model: ${AI_CHAT_MODEL:claude-opus-4-8}
+      max-tokens: 4096
+      api-key: ${ANTHROPIC_API_KEY:}
 
   # Daily retention cleanup — physically purges soft-deleted rows past their window.
   cleanup:

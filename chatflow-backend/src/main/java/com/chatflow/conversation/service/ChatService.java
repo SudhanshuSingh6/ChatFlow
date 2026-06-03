@@ -1,5 +1,6 @@
 package com.chatflow.conversation.service;
 
+import com.chatflow.conversation.search.EmbeddingRequested;
 import com.chatflow.conversation.dto.MessageResponse;
 import com.chatflow.conversation.entity.Conversation;
 import com.chatflow.conversation.entity.Message;
@@ -95,6 +96,11 @@ public class ChatService {
                     new NotificationCommand(recipients, senderId, NotificationType.NEW_MESSAGE,
                             ReferenceType.CONVERSATION, conversationId, preview(content), true));
         }
+
+        // Request a semantic-search embedding in the SAME tx (no event spawns another event).
+        // Drained async by the embedding worker; independent of the notification event above.
+        outboxWriter.write("message", saved.getId(),
+                OutboxEventType.MESSAGE_EMBEDDING_REQUESTED, new EmbeddingRequested(saved.getId()));
 
         // Deliver only after commit, so a rollback never leaks a phantom message.
         AfterCommit.run(() -> {

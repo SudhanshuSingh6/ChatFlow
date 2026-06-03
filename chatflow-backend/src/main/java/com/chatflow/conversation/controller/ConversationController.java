@@ -1,7 +1,9 @@
 package com.chatflow.conversation.controller;
 
 import com.chatflow.conversation.dto.*;
+import com.chatflow.conversation.service.ConversationRagService;
 import com.chatflow.conversation.service.ConversationService;
+import com.chatflow.conversation.service.ConversationSummaryService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -28,6 +30,8 @@ public class ConversationController {
     private static final int DEFAULT_PAGE_SIZE = 20;
 
     private final ConversationService conversationService;
+    private final ConversationSummaryService conversationSummaryService;
+    private final ConversationRagService conversationRagService;
 
     // ---- creation ----
 
@@ -73,6 +77,20 @@ public class ConversationController {
             @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int limit,
             Principal principal) {
         return conversationService.getMessagesAfter(callerId(principal), conversationId, after, limit);
+    }
+
+    /** AI "catch me up" — summarize everything the caller hasn't read in this conversation. */
+    @PostMapping("/{conversationId}/summary")
+    public SummaryResponse summarize(@PathVariable UUID conversationId, Principal principal) {
+        return conversationSummaryService.summarizeUnread(callerId(principal), conversationId);
+    }
+
+    /** RAG "ask your chat history" — answer a question grounded in this conversation, with citations. */
+    @PostMapping("/{conversationId}/ask")
+    public AskResponse ask(@PathVariable UUID conversationId,
+                           @RequestBody @Valid AskRequest request,
+                           Principal principal) {
+        return conversationRagService.ask(callerId(principal), conversationId, request.question());
     }
 
     // ---- group lifecycle / membership ----

@@ -1,5 +1,6 @@
 package com.chatflow.conversation.service;
 
+import com.chatflow.conversation.search.MessageEmbeddingRepository;
 import com.chatflow.conversation.repository.ConversationParticipantRepository;
 import com.chatflow.conversation.repository.ConversationRepository;
 import com.chatflow.conversation.repository.MessageRepository;
@@ -39,6 +40,7 @@ public class DailyCleanupService {
     private final NotificationRepository notificationRepository;
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
+    private final MessageEmbeddingRepository embeddingRepository;
     private final TransactionTemplate tx;
 
     @Value("${app.cleanup.retention.messages-days:30}")
@@ -54,11 +56,13 @@ public class DailyCleanupService {
                                NotificationRepository notificationRepository,
                                ConversationRepository conversationRepository,
                                ConversationParticipantRepository participantRepository,
+                               MessageEmbeddingRepository embeddingRepository,
                                PlatformTransactionManager txManager) {
         this.messageRepository = messageRepository;
         this.notificationRepository = notificationRepository;
         this.conversationRepository = conversationRepository;
         this.participantRepository = participantRepository;
+        this.embeddingRepository = embeddingRepository;
         this.tx = new TransactionTemplate(txManager);
     }
 
@@ -71,7 +75,11 @@ public class DailyCleanupService {
 
     void purgeMessages() {
         Instant cutoff = Instant.now().minus(messageRetentionDays, ChronoUnit.DAYS);
-        int purged = tx.execute(s -> messageRepository.purgeDeletedBefore(cutoff));
+        int purged = tx.execute(s -> {
+            // Embeddings reference messages (FK) — drop them before deleting the tombstones.
+            embeddingRepository.deleteForMessagesDeletedBefore(cutoff);
+            return messageRepository.purgeDeletedBefore(cutoff);
+        });
         if (purged > 0) {
             log.info("Purged {} soft-deleted messages older than {} days", purged, messageRetentionDays);
         }
@@ -109,6 +117,7 @@ public class DailyCleanupService {
 
     /** Physical cascade for one soft-deleted group. Runs inside a transaction. */
     private void cascadeDeleteGroup(UUID conversationId) {
+        embeddingRepository.deleteForConversation(conversationId);   // before messages (FK)
         notificationRepository.deleteByConversation(conversationId);
         messageRepository.deleteByConversationId(conversationId);
         participantRepository.deleteByConversationId(conversationId);

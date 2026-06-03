@@ -1,6 +1,5 @@
 package com.chatflow.infra.outbox;
 
-import com.chatflow.notification.event.NotificationCommand;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.ObjectMapper;
@@ -28,9 +27,13 @@ public class OutboxWriter {
                 .build());
     }
 
-    /** Convenience for the common case: an event whose payload is a notification command. */
+    /**
+     * Convenience for the common case: an event whose payload is a notification command.
+     * Typed as {@code Object} so {@code infra/outbox} stays free of the notification
+     * feature; the payload is serialized the same as in {@link #write}.
+     */
     public void writeNotification(String eventType, String aggregateType,
-                                  UUID aggregateId, NotificationCommand command) {
+                                  UUID aggregateId, Object command) {
         write(aggregateType, aggregateId, eventType, command);
     }
 }

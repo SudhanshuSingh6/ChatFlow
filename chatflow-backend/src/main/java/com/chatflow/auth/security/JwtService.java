@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -35,17 +36,12 @@ public class JwtService {
                 .compact();
     }
 
-    public UUID extractUserId(String token) {
-        return UUID.fromString(parseClaims(token).getSubject());
-    }
-
-    public boolean isValid(String token) {
+    public Optional<UUID> extractUserId(String token) {
         try {
-            parseClaims(token);
-            return true;
+            return Optional.of(UUID.fromString(parseClaims(token).getSubject()));
         } catch (Exception ex) {
             log.debug("Invalid JWT: {}", ex.getMessage());
-            return false;
+            return Optional.empty();
         }
     }
 

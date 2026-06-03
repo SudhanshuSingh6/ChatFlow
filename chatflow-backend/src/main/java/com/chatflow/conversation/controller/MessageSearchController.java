@@ -1,5 +1,6 @@
 package com.chatflow.conversation.controller;
 
+import com.chatflow.conversation.dto.RankedSearchResult;
 import com.chatflow.conversation.dto.SearchPageResponse;
 import com.chatflow.conversation.service.MessageSearchService;
 import lombok.RequiredArgsConstructor;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.security.Principal;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -26,5 +28,15 @@ public class MessageSearchController {
             Principal principal) {
         UUID callerId = UUID.fromString(principal.getName());
         return messageSearchService.search(callerId, query, cursor, limit);
+    }
+
+    /** Hybrid semantic + keyword search, ranked by merged {@code rankScore} (top-k, no cursor). */
+    @GetMapping("/search/hybrid")
+    public List<RankedSearchResult> hybridSearch(
+            @RequestParam String query,
+            @RequestParam(defaultValue = "20") int limit,
+            Principal principal) {
+        UUID callerId = UUID.fromString(principal.getName());
+        return messageSearchService.hybridSearch(callerId, query, limit);
     }
 }

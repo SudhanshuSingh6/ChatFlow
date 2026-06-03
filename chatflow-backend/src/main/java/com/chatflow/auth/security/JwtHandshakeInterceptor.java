@@ -1,6 +1,5 @@
-package com.chatflow.config;
+package com.chatflow.auth.security;
 
-import com.chatflow.auth.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.server.ServerHttpRequest;
@@ -34,13 +33,13 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
                 .getQueryParams()
                 .getFirst("token");
 
-        if (token == null || !jwtService.isValid(token)) {
+        UUID userId = token == null ? null : jwtService.extractUserId(token).orElse(null);
+        if (userId == null) {
             log.warn("WebSocket handshake rejected — missing or invalid token from {}",
                     request.getRemoteAddress());
             return false;
         }
 
-        UUID userId = jwtService.extractUserId(token);
         attributes.put(USER_ID_ATTR, userId);
         log.debug("WebSocket handshake accepted for userId={}", userId);
         return true;

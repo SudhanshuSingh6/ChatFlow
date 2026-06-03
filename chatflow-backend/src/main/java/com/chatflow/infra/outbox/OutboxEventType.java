@@ -11,6 +11,7 @@ public final class OutboxEventType {
     }
 
     public static final String MESSAGE_CREATED = "message.created";
+    public static final String MESSAGE_EMBEDDING_REQUESTED = "message.embedding_requested";
     public static final String FRIEND_REQUESTED = "friend.requested";
     public static final String FRIEND_REQUEST_ACCEPTED = "friend.request_accepted";
     public static final String GROUP_MEMBER_ADDED = "group.member_added";
