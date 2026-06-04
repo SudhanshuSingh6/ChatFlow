@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.chatflow</groupId>
+        <artifactId>chatflow-backend</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>chatflow-contracts</artifactId>
+    <name>chatflow-contracts</name>
+    <description>Versioned event payloads shared across services. Plain records, no framework
+        deps — the wire contract between core, ai, and future services.</description>
+
+    <!-- Intentionally dependency-free: shared events must not drag a framework onto every
+         service's classpath. Keep these records backward-compatible (additive changes only). -->
+
+</project>

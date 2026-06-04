@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: chatflow-gateway
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: ai-service
+              uri: ${AI_URI:http://localhost:8081}
+              predicates:
+                - Path=/ai/**
+            - id: core-service
+              uri: ${CORE_URI:http://localhost:8080}
+              predicates:
+                - Path=/api/**
+
+# Public entry point. Core (8080) and ai (8081) sit behind it; in production they'd be
+# internal-only and the gateway would take the public port.
+server:
+  port: ${SERVER_PORT:8088}
+
+app:
+  # Same secret as core/ai — used only to validate (not mint) tokens at the edge.
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-must-be-at-least-32-chars}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, gateway
+  endpoint:
+    health:
+      show-details: when-authorized

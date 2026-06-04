@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: chatflow-realtime
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
+server:
+  port: ${SERVER_PORT:8083}
+
+app:
+  # Must match core's app.instance-id semantics; used to ignore our own relay echoes (n/a here).
+  instance-id: ${APP_INSTANCE_ID:${random.uuid}}
+  core:
+    base-url: ${CORE_BASE_URL:http://localhost:8080}
+  internal:
+    token: ${INTERNAL_TOKEN:dev-internal-token}
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-must-be-at-least-32-chars}
+  websocket:
+    idle-timeout-seconds: 90
+    ping-interval-ms: 30000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    tags:
+      app: chatflow-realtime

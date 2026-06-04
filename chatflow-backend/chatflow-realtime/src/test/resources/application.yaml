@@ -1,0 +1,7 @@
+# Test config: no external infra. The relay listener doesn't auto-start (no Redis required).
+app:
+  jwt:
+    secret: test-secret-that-is-at-least-32-characters-long
+  relay:
+    listener:
+      auto-startup: false

@@ -1,0 +1,57 @@
+spring:
+  application:
+    name: chatflow-media
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    listener:
+      observation-enabled: true
+    template:
+      observation-enabled: true
+
+server:
+  port: ${SERVER_PORT:8082}
+
+app:
+  # Consumes the shared outbox topic, filters media.processing_requested; emits thumbnail-ready.
+  outbox:
+    topic: ${APP_OUTBOX_TOPIC:chatflow.outbox.events}
+  media:
+    consumer-group: ${APP_MEDIA_CONSUMER_GROUP:chatflow-media}
+    thumbnail-ready-topic: ${APP_MEDIA_THUMBNAIL_READY_TOPIC:chatflow.media.thumbnail-ready}
+    # Local-storage profile: MUST be the same directory core writes originals to.
+    upload-dir: ${MEDIA_UPLOAD_DIR:./uploads}
+    base-url: ${MEDIA_BASE_URL:http://localhost:8080/media}
+    thumbnail:
+      max-size: 320
+      ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
+      ffmpeg-timeout-seconds: 20
+  # Only bound under the 's3' profile (shared MinIO bucket with core).
+  s3:
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    bucket: ${S3_BUCKET:chatflow}
+    region: ${S3_REGION:us-east-1}
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    presigned-url-expiry-minutes: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    tags:
+      app: chatflow-media

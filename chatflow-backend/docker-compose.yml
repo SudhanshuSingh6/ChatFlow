@@ -1,6 +1,7 @@
 services:
+  # core-chat database. pgvector image because core's V3 migration creates the vector extension.
   postgres:
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     container_name: chatflow-postgres
     environment:
       POSTGRES_DB: chatflow
@@ -10,6 +11,29 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatflow -d chatflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ai-service database (database-per-service). Separate instance + port; also pgvector.
+  postgres-ai:
+    image: pgvector/pgvector:pg17
+    container_name: chatflow-postgres-ai
+    environment:
+      POSTGRES_DB: chatflow_ai
+      POSTGRES_USER: chatflow
+      POSTGRES_PASSWORD: chatflow
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-ai-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatflow -d chatflow_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:8
@@ -32,7 +56,228 @@ services:
     volumes:
       - minio-data:/data
 
+  # Event backbone for the microservices migration (KRaft mode, single node — no Zookeeper).
+  # Dual listeners: EXTERNAL for the app running on the host (localhost:9092),
+  # INTERNAL for other containers on the compose network (kafka:29092).
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: chatflow-kafka
+    ports:
+      - "9092:9092"
+
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+
+      KAFKA_LISTENERS: PLAINTEXT://:29092,PLAINTEXT_HOST://:9092,CONTROLLER://:9093
+
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+
+  # Distributed tracing backend. Receives spans over OTLP (4318 HTTP / 4317 gRPC),
+  # UI at http://localhost:16686. All-in-one is in-memory — fine for local dev.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    container_name: chatflow-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+
+  # Web UI for inspecting topics/consumer groups — handy for verifying the outbox flow.
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: chatflow-kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: chatflow
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    depends_on:
+      - kafka
+
+  # Scrapes /actuator/prometheus on every app service.
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: chatflow-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  # Dashboards: provisioned Prometheus datasource + the "ChatFlow Realtime" board. Anonymous view.
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: chatflow-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # One-shot: create the shared media bucket in MinIO (core writes originals, media reads them).
+  createbuckets:
+    image: minio/mc
+    container_name: chatflow-createbuckets
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+      /usr/bin/mc mb --ignore-existing local/chatflow;
+      exit 0;"
+
+  # ---- Application services (opt-in: `docker compose --profile apps up --build`) ----
+  # Plain `docker compose up` still brings up infra only.
+
+  core:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: chatflow-core/Dockerfile
+    container_name: chatflow-core
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/chatflow
+      DB_USERNAME: chatflow
+      DB_PASSWORD: chatflow
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_OUTBOX_TRANSPORT: kafka
+      SPRING_PROFILES_ACTIVE: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: chatflow
+      AI_BASE_URL: http://ai:8081
+      APP_REALTIME_MODE: external
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-at-least-32-chars}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+
+  ai:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: chatflow-ai/Dockerfile
+    container_name: chatflow-ai
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    depends_on:
+      postgres-ai:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      AI_DB_URL: jdbc:postgresql://postgres-ai:5432/chatflow_ai
+      AI_DB_USERNAME: chatflow
+      AI_DB_PASSWORD: chatflow
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CORE_BASE_URL: http://core:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-at-least-32-chars}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+  media:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: chatflow-media/Dockerfile
+    container_name: chatflow-media
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+      minio:
+        condition: service_started
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_PROFILES_ACTIVE: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: chatflow
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+
+  gateway:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: chatflow-gateway/Dockerfile
+    container_name: chatflow-gateway
+    ports:
+      - "8088:8088"
+    restart: unless-stopped
+    depends_on:
+      core:
+        condition: service_started
+      ai:
+        condition: service_started
+    environment:
+      CORE_URI: http://core:8080
+      AI_URI: http://ai:8081
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-at-least-32-chars}
+
+  realtime:
+    profiles: ["apps"]
+    build:
+      context: .
+      dockerfile: chatflow-realtime/Dockerfile
+    container_name: chatflow-realtime
+    ports:
+      - "8083:8083"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_started
+      core:
+        condition: service_started
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      CORE_BASE_URL: http://core:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-at-least-32-chars}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+
 volumes:
   postgres-data:
+  postgres-ai-data:
   redis-data:
   minio-data:
+  kafka-data:

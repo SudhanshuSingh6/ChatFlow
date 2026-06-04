@@ -1,0 +1,142 @@
+spring:
+  # Becomes the OpenTelemetry service.name on emitted traces.
+  application:
+    name: chatflow-backend
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chatflow
+    username: ${DB_USERNAME:chatflow}
+    password: ${DB_PASSWORD:chatflow}
+  jpa:
+    hibernate:
+      # Schema is owned by Flyway now; Hibernate only verifies entities match it.
+      ddl-auto: validate
+    show-sql: false
+    # Schema is a clean rewrite to the unified model — V1 is the full schema and
+    # must run against a fresh DB (drop the dev DB once before first boot).
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      # Outbox events are plain JSON strings (provider-neutral, no type headers).
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    # Propagate the trace context across the broker as Kafka headers: the producer injects
+    # traceparent on send, the listener continues the trace on receive.
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 105MB
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-must-be-at-least-32-chars}
+    expiration-ms: 86400000
+  # Shared secret guarding /internal service-to-service endpoints (must match ai-service).
+  internal:
+    token: ${INTERNAL_TOKEN:dev-internal-token}
+  presence:
+    heartbeat-interval-ms: 30000
+  websocket:
+    idle-timeout-seconds: 90
+    ping-interval-seconds: 30
+    ping-interval-ms: 30000
+
+  # Where WebSockets are terminated. `embedded` (default): core serves /ws (legacy/fallback).
+  # `external`: the chatflow-realtime service serves /ws; core only publishes frames to chat:relay
+  # and exposes /internal/realtime/* for inbound commands + connection lifecycle.
+  realtime:
+    mode: ${APP_REALTIME_MODE:embedded}
+
+  # Transactional outbox transport. `in-process` (default) dispatches in-JVM, unchanged
+  # legacy behavior. `kafka` publishes each event to the broker and consumes it back via
+  # an in-app listener — the event backbone the microservices split builds on.
+  outbox:
+    transport: ${APP_OUTBOX_TRANSPORT:in-process}
+    poll-interval-ms: 1000
+    kafka:
+      topic: chatflow.outbox.events
+      consumer-group: chatflow-outbox
+      send-timeout-seconds: 10
+
+  media:
+    upload-dir: ${MEDIA_UPLOAD_DIR:./uploads}
+    base-url: ${MEDIA_BASE_URL:http://localhost:8080/media}
+    # Thumbnailing runs in chatflow-media; core consumes its completion events from this topic
+    # (only active in kafka transport mode). thumbnail.* below is now used only by chatflow-media.
+    thumbnail-ready-topic: ${APP_MEDIA_THUMBNAIL_READY_TOPIC:chatflow.media.thumbnail-ready}
+    thumbnail-ready-consumer-group: ${APP_MEDIA_THUMBNAIL_READY_CONSUMER_GROUP:chatflow-core-media}
+    max-file-size-bytes:
+      IMAGE: 10485760    # 10 MB
+      VIDEO: 104857600   # 100 MB
+      AUDIO: 20971520    # 20 MB
+      FILE:  52428800    # 50 MB
+    # (thumbnail.* / processing.* removed — thumbnailing lives in chatflow-media now.)
+    # Phase 8 — how long an issued access URL stays valid.
+    signed-url-ttl-minutes: 60
+    # Phase 7 — storage purge retry job.
+    cleanup:
+      interval-ms: 300000        # how often the retry job runs
+      retry-after-seconds: 120   # grace period before retrying a marked row
+
+  s3:
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    bucket: ${S3_BUCKET:chatflow}
+    region: ${S3_REGION:us-east-1}
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    presigned-url-expiry-minutes: 60
+
+  # ai-service base URL — core calls it for semantic (vector) search; ai owns the embedding
+  # store now. core still emits MessageEmbeddingRequested events that ai consumes to populate it.
+  ai:
+    base-url: ${AI_BASE_URL:http://localhost:8081}
+
+  # Daily retention cleanup — physically purges soft-deleted rows past their window.
+  cleanup:
+    interval-ms: 86400000          # how often the cleanup job runs (daily)
+    retention:
+      messages-days: 30
+      groups-days: 30
+      notifications-days: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  # Distributed tracing. Dev samples 100%; lower in production. Spans export over OTLP
+  # (default Jaeger all-in-one HTTP endpoint from docker-compose).
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}
+  metrics:
+    tags:
+      app: chatflow
+    distribution:
+      # Enables histogram buckets for p50/p95/p99 on the delivery timer.
+      # Without this, only mean and max are available.
+      percentiles-histogram:
+        chatflow.messages.delivery.latency: true
+      percentiles:
+        chatflow.messages.delivery.latency: 0.5, 0.95, 0.99

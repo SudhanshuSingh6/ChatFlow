@@ -1,0 +1,5 @@
+# Test config: default (local) storage profile, Kafka listeners don't start (no broker).
+spring:
+  kafka:
+    listener:
+      auto-startup: false

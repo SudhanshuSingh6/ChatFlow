@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media
+  labels: { app: media }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: media } }
+  template:
+    metadata: { labels: { app: media } }
+    spec:
+      containers:
+        - name: media
+          image: chatflow-media:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8082 }]
+          envFrom:
+            - secretRef: { name: chatflow-secrets }
+          env:
+            - { name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: kafka:9092 }
+            - { name: SPRING_PROFILES_ACTIVE, value: s3 }
+            - { name: S3_ENDPOINT, value: http://minio:9000 }
+            - { name: S3_BUCKET, value: chatflow }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://jaeger:4318/v1/traces }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8082 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8082 }
+            initialDelaySeconds: 45
+            periodSeconds: 15
+          # FFmpeg is CPU-heavy — give media more headroom (and the HPA scales it).
+          resources:
+            requests: { cpu: "500m", memory: "512Mi" }
+            limits: { cpu: "2", memory: "1Gi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: media
+spec:
+  selector: { app: media }
+  ports: [{ port: 8082, targetPort: 8082 }]

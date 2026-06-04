@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: chatflow-ai
+  # ai-service owns its OWN database (database-per-service). Separate Postgres instance/port
+  # from core; needs the pgvector extension (pgvector/pgvector image).
+  datasource:
+    url: ${AI_DB_URL:jdbc:postgresql://localhost:5433/chatflow_ai}
+    username: ${AI_DB_USERNAME:chatflow}
+    password: ${AI_DB_PASSWORD:chatflow}
+  flyway:
+    enabled: true
+    baseline-on-migrate: false
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    # Continue the trace started in core across the Kafka hop.
+    listener:
+      observation-enabled: true
+
+# Distinct port so ai-service and core-chat run side by side in local dev.
+server:
+  port: ${SERVER_PORT:8081}
+
+app:
+  # Same HS256 secret as core — ai re-verifies caller JWTs until the gateway terminates auth.
+  jwt:
+    secret: ${JWT_SECRET:change-me-in-production-must-be-at-least-32-chars}
+  # Sync membership checks against core's /internal endpoint.
+  core:
+    base-url: ${CORE_BASE_URL:http://localhost:8080}
+  internal:
+    token: ${INTERNAL_TOKEN:dev-internal-token}
+  # Consumes the shared outbox topic with its own consumer group (independent of core's).
+  outbox:
+    topic: ${APP_OUTBOX_TOPIC:chatflow.outbox.events}
+    consumer-group: ${APP_OUTBOX_CONSUMER_GROUP:chatflow-ai-embedding}
+  ai:
+    embedding:
+      base-url: ${AI_EMBEDDING_BASE_URL:https://api.openai.com/v1}
+      api-key: ${AI_EMBEDDING_API_KEY:}
+      model: ${AI_EMBEDDING_MODEL:text-embedding-3-small}
+      dimensions: 1536   # must match the message_embeddings.embedding column
+    chat:
+      provider: ${AI_CHAT_PROVIDER:anthropic}
+      model: ${AI_CHAT_MODEL:claude-opus-4-8}
+      max-tokens: 4096
+      api-key: ${ANTHROPIC_API_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  tracing:
+    sampling:
+      probability: ${MANAGEMENT_TRACING_SAMPLING_PROBABILITY:1.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  metrics:
+    tags:
+      app: chatflow-ai

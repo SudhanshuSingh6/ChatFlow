@@ -1,0 +1,65 @@
+{
+  "title": "ChatFlow Realtime",
+  "uid": "chatflow-realtime",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active sessions",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(realtime_active_sessions)", "legendFormat": "sessions" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Connected users",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(realtime_connected_users)", "legendFormat": "users" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Frames sent /s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(realtime_frames_sent_total[1m]))", "legendFormat": "sent/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Frames received /s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(realtime_frames_received_total[1m]))", "legendFormat": "received/s" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Relay messages /s",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(realtime_relay_messages_total[1m]))", "legendFormat": "relay/s" }
+      ]
+    }
+  ]
+}

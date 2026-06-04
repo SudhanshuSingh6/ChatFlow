@@ -1,0 +1,14 @@
+# Test config: no external infra. Flyway off, Kafka listeners don't start (no broker),
+# and the DataSource is mocked in the context-load test.
+spring:
+  flyway:
+    enabled: false
+  kafka:
+    listener:
+      auto-startup: false
+app:
+  jwt:
+    secret: test-secret-that-is-at-least-32-characters-long
+  ai:
+    embedding:
+      api-key: test-key

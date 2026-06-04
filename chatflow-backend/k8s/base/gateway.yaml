@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels: { app: gateway }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: gateway
+          image: chatflow-gateway:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8088 }]
+          envFrom:
+            - secretRef: { name: chatflow-secrets }
+          env:
+            - { name: CORE_URI, value: http://core:8080 }
+            - { name: AI_URI, value: http://ai:8081 }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8088 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8088 }
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector: { app: gateway }
+  ports: [{ port: 8088, targetPort: 8088 }]
+---
+# Single public entry point. Requires an ingress controller (e.g. ingress-nginx).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gateway
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gateway
+                port:
+                  number: 8088

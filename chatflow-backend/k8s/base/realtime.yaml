@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realtime
+  labels: { app: realtime }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: realtime } }
+  template:
+    metadata: { labels: { app: realtime } }
+    spec:
+      containers:
+        - name: realtime
+          image: chatflow-realtime:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8083 }]
+          envFrom:
+            - secretRef: { name: chatflow-secrets }
+          env:
+            - { name: SPRING_DATA_REDIS_HOST, value: redis }
+            - { name: CORE_BASE_URL, value: http://core:8080 }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://jaeger:4318/v1/traces }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8083 }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8083 }
+            initialDelaySeconds: 40
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "500m", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: realtime
+spec:
+  selector: { app: realtime }
+  ports: [{ port: 8083, targetPort: 8083 }]

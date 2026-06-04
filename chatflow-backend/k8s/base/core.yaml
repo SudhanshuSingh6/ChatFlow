@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+  labels: { app: core }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: core } }
+  template:
+    metadata: { labels: { app: core } }
+    spec:
+      containers:
+        - name: core
+          image: chatflow-core:local
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - secretRef: { name: chatflow-secrets }
+          env:
+            - { name: SPRING_DATASOURCE_URL, value: jdbc:postgresql://postgres:5432/chatflow }
+            - { name: SPRING_DATA_REDIS_HOST, value: redis }
+            - { name: SPRING_KAFKA_BOOTSTRAP_SERVERS, value: kafka:9092 }
+            - { name: APP_OUTBOX_TRANSPORT, value: kafka }
+            - { name: SPRING_PROFILES_ACTIVE, value: s3 }
+            - { name: S3_ENDPOINT, value: http://minio:9000 }
+            - { name: S3_BUCKET, value: chatflow }
+            - { name: AI_BASE_URL, value: http://ai:8081 }
+            - { name: APP_REALTIME_MODE, value: external }
+            - { name: OTEL_EXPORTER_OTLP_ENDPOINT, value: http://jaeger:4318/v1/traces }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 45
+            periodSeconds: 15
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core
+spec:
+  selector: { app: core }
+  ports: [{ port: 8080, targetPort: 8080 }]
