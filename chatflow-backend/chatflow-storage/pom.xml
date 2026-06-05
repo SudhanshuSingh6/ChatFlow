@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.chatflow</groupId>
+        <artifactId>chatflow-backend</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>chatflow-storage</artifactId>
+    <name>chatflow-storage</name>
+    <description>Shared object-store layer (local disk + S3/MinIO) used by core and media.
+        Segregated capability interfaces (Readable/Writable/Url) + one combined facade; the single
+        source of truth for storage-key derivation so thumbnails never land where core can't find them.</description>
+
+    <dependencies>
+        <!-- @Component/@Profile/@Value + @ConfigurationProperties binding. No web server: this is a
+             library, so we pull spring-boot-starter (context), NOT spring-boot-starter-web. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- org.springframework.web.multipart.MultipartFile (WritableStorage.store). -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <!-- S3 / MinIO client + presigner. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.25.27</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

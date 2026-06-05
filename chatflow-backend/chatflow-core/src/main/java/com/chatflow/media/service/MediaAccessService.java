@@ -3,7 +3,7 @@ package com.chatflow.media.service;
 import com.chatflow.media.dto.MediaUrlResponse;
 import com.chatflow.media.entity.MediaMessage;
 import com.chatflow.media.repository.MediaMessageRepository;
-import com.chatflow.media.storage.MediaStorageService;
+import com.chatflow.media.storage.UrlStorage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -28,7 +28,7 @@ public class MediaAccessService {
 
     private final MediaMessageRepository mediaMessageRepository;
     private final MediaAccessGuard accessGuard;
-    private final MediaStorageService mediaStorageService;
+    private final UrlStorage mediaStorageService;
 
     @Value("${app.media.signed-url-ttl-minutes:60}")
     private long ttlMinutes;

@@ -1,7 +1,6 @@
 package com.chatflow.infra.websocket;
 
 import com.chatflow.config.MetricsConfig;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import tools.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;

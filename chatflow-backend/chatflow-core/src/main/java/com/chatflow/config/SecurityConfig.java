@@ -30,6 +30,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/ws").permitAll()
+                        // Gated by MediaTokenFilter (HMAC ?exp=&t=), not the bearer chain, so
+                        // <img>/download requests without an Authorization header can load media.
+                        .requestMatchers("/media/**").permitAll()
                         // Service-to-service; gated by a shared X-Internal-Token in the controller.
                         .requestMatchers("/internal/**").permitAll()
                         .anyRequest().authenticated()

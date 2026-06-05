@@ -14,11 +14,11 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import java.net.URI;
 
 /**
- * Phase 5 — wires the AWS SDK v2 {@link S3Client} and {@link S3Presigner}.
+ * Wires the AWS SDK v2 {@link S3Client} and {@link S3Presigner}.
  *
- * <p>MinIO is S3-compatible: the same client talks to it via an endpoint
- * override with path-style access enabled. Only active under the {@code s3}
- * profile; the {@code local} (default) profile keeps {@link LocalMediaStorageService}.
+ * <p>MinIO is S3-compatible: the same client talks to it via an endpoint override with path-style
+ * access enabled. Only active under the {@code s3} profile; the default profile uses
+ * {@link LocalMediaStorageService}.
  */
 @Configuration
 @Profile("s3")

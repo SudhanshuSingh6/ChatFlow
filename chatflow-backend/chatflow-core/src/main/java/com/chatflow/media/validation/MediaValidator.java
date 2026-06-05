@@ -32,23 +32,18 @@ public class MediaValidator {
 
     private final MediaValidationConfig config;
 
-    public void validate(MultipartFile file, MessageType type) {
+    /**
+     * Runs all media checks and returns the MIME type detected from magic bytes
+     * (detected once). Callers store this verified mimeType — not the
+     * client-supplied Content-Type.
+     */
+    public String validate(MultipartFile file, MessageType type) {
         rejectEmpty(file);
         rejectBlockedExtension(file);
         rejectOversizedFile(file, type);
         String detectedMime = detectMimeType(file);
         rejectDisallowedMime(detectedMime, type);
-    }
-
-    /**
-     * Returns the MIME type detected from magic bytes.
-     * Callers use this to store the verified mimeType — not the
-     * client-supplied Content-Type.
-     */
-    public String detectAndVerifyMimeType(MultipartFile file, MessageType type) {
-        String mime = detectMimeType(file);
-        rejectDisallowedMime(mime, type);
-        return mime;
+        return detectedMime;
     }
 
     // --- private checks ---

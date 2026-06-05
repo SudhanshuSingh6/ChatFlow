@@ -61,7 +61,7 @@ public class ConversationController {
     public MessagePageResponse getMessages(
             @PathVariable UUID conversationId,
             @RequestParam(defaultValue = "" + Long.MAX_VALUE) long before,
-            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int limit,
+            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) @Min(1) @Max(50) int limit,
             Principal principal) {
         return conversationService.getMessages(callerId(principal), conversationId, before, limit);
     }
@@ -70,7 +70,7 @@ public class ConversationController {
     public MessagePageResponse getMessagesAfter(
             @PathVariable UUID conversationId,
             @RequestParam long after,
-            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) int limit,
+            @RequestParam(defaultValue = "" + DEFAULT_PAGE_SIZE) @Min(1) @Max(50) int limit,
             Principal principal) {
         return conversationService.getMessagesAfter(callerId(principal), conversationId, after, limit);
     }

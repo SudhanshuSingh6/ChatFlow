@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * S3 / MinIO connection settings, bound from {@code app.s3.*}.
- * Only created under the {@code s3} profile.
+ * S3 / MinIO connection settings, bound from {@code app.s3.*}. In media this must point at the
+ * SAME bucket core writes originals to. Only created under the {@code s3} profile.
  */
 @Data
 @Component
@@ -21,11 +21,10 @@ public class S3Properties {
     private String region = "us-east-1";
 
     /**
-     * Custom endpoint for MinIO / S3-compatible stores. Leave null/blank to use
-     * real AWS S3.
+     * Custom endpoint for MinIO / S3-compatible stores. Leave null/blank to use real AWS S3.
      */
     private String endpoint;
 
-    /** Default TTL for presigned URLs (Phase 8). */
+    /** Default TTL for presigned URLs. */
     private long presignedUrlExpiryMinutes = 60;
 }

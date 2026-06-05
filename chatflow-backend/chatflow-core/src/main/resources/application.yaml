@@ -76,6 +76,9 @@ app:
   media:
     upload-dir: ${MEDIA_UPLOAD_DIR:./uploads}
     base-url: ${MEDIA_BASE_URL:http://localhost:8080/media}
+    # HMAC secret for signing local /media/** URLs. Separate from app.jwt.secret (different
+    # trust domain). Override in every environment that mints local media URLs.
+    signing-secret: ${MEDIA_SIGNING_SECRET:change-me-local-media-signing-secret-32-chars}
     # Thumbnailing runs in chatflow-media; core consumes its completion events from this topic
     # (only active in kafka transport mode). thumbnail.* below is now used only by chatflow-media.
     thumbnail-ready-topic: ${APP_MEDIA_THUMBNAIL_READY_TOPIC:chatflow.media.thumbnail-ready}

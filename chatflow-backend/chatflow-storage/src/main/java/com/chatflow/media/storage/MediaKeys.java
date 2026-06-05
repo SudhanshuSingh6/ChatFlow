@@ -2,7 +2,8 @@ package com.chatflow.media.storage;
 
 /**
  * Single source of truth for deriving related storage keys from a media object's primary
- * {@code storageKey}. Must stay in sync with core's copy so both agree where the thumbnail lives.
+ * {@code storageKey}. Lives in chatflow-storage so core (cleanup) and media (thumbnail
+ * generation) compute identical keys — otherwise a thumbnail lands where core can't find it.
  */
 public final class MediaKeys {
 

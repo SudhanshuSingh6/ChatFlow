@@ -4,7 +4,7 @@ import com.chatflow.media.entity.MediaMessage;
 import com.chatflow.media.entity.MediaStatus;
 import com.chatflow.media.repository.MediaMessageRepository;
 import com.chatflow.media.storage.MediaKeys;
-import com.chatflow.media.storage.MediaStorageService;
+import com.chatflow.media.storage.WritableStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -28,7 +28,7 @@ import java.util.UUID;
 public class MediaStoragePurger {
 
     private final MediaMessageRepository mediaMessageRepository;
-    private final MediaStorageService mediaStorageService;
+    private final WritableStorage mediaStorageService;
 
     @Transactional
     public void purge(UUID mediaMessageId) {

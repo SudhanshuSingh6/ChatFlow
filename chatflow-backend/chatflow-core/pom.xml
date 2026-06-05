@@ -18,6 +18,11 @@
             <groupId>com.chatflow</groupId>
             <artifactId>chatflow-contracts</artifactId>
         </dependency>
+        <!-- Shared object-store layer (local + S3/MinIO). Brings the AWS SDK transitively. -->
+        <dependency>
+            <groupId>com.chatflow</groupId>
+            <artifactId>chatflow-storage</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -115,10 +120,10 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
-        </dependency>
+        <!-- Jackson: the app uses Jackson 3 (tools.jackson) from spring-boot-starter-jackson.
+             Jackson 2 (com.fasterxml) is NOT declared directly — it's pulled at runtime only by
+             jjwt-jackson, which needs it to serialize JWT claims. Don't add a compile-scope
+             jackson-databind back unless main code actually imports com.fasterxml.* -->
 
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -146,11 +151,7 @@
             <artifactId>logstash-logback-encoder</artifactId>
             <version>7.4</version>
         </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <version>2.25.27</version>
-        </dependency>
+        <!-- AWS SDK (S3/MinIO) now comes transitively via chatflow-storage. -->
 
         <!-- Image thumbnail generation (Phase 6) -->
         <dependency>

@@ -17,8 +17,8 @@ import com.chatflow.media.entity.MediaStatus;
 import com.chatflow.media.entity.MessageType;
 import com.chatflow.contracts.events.MediaProcessingRequested;
 import com.chatflow.media.repository.MediaMessageRepository;
-import com.chatflow.media.storage.MediaStorageService;
 import com.chatflow.media.storage.StoredMedia;
+import com.chatflow.media.storage.WritableStorage;
 import com.chatflow.media.validation.MediaValidator;
 import com.chatflow.notification.entity.NotificationType;
 import com.chatflow.notification.entity.ReferenceType;
@@ -48,7 +48,7 @@ public class MediaMessageService {
 
     private final MediaMessageRepository mediaMessageRepository;
     private final MediaValidator mediaValidator;
-    private final MediaStorageService mediaStorageService;
+    private final WritableStorage mediaStorageService;
     private final WebSocketGateway webSocketGateway;
     private final ConversationRepository conversationRepository;
     private final ConversationParticipantRepository participantRepository;
@@ -69,8 +69,7 @@ public class MediaMessageService {
                     "User " + senderId + " is not a participant in " + conversationId);
         }
 
-        String detectedMime = mediaValidator.detectAndVerifyMimeType(file, messageType);
-        mediaValidator.validate(file, messageType);
+        String detectedMime = mediaValidator.validate(file, messageType);
 
         String safeOriginalName = sanitiseOriginalFilename(file.getOriginalFilename());
         String storageKey       = buildStorageKey(messageType, detectedMime);
@@ -188,8 +187,9 @@ public class MediaMessageService {
 
     private String sanitiseOriginalFilename(String original) {
         if (original == null || original.isBlank()) return "unnamed";
-        return Path.of(original).getFileName().toString()
-                .replaceAll("[^a-zA-Z0-9._\\- ]", "_")
-                .substring(0, Math.min(original.length(), 255));
+        Path name = Path.of(original).getFileName();
+        if (name == null) return "unnamed";
+        String basename = name.toString().replaceAll("[^a-zA-Z0-9._\\- ]", "_");
+        return basename.substring(0, Math.min(basename.length(), 255));
     }
 }
