@@ -15,6 +15,7 @@ import com.chatflow.notification.entity.ReferenceType;
 import com.chatflow.notification.event.NotificationCommand;
 import com.chatflow.user.entity.User;
 import com.chatflow.user.repository.UserRepository;
+import com.chatflow.user.service.UserDirectory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -33,8 +34,16 @@ public class FriendService {
 
     private final FriendshipRepository friendshipRepository;
     private final UserRepository userRepository;
+    private final UserDirectory userDirectory;
     private final WebSocketGateway webSocketGateway;
     private final OutboxWriter outboxWriter;
+
+    /** Build a response from {@code perspective}'s point of view, resolving the other user's name. */
+    private FriendshipResponse toResponse(Friendship friendship, UUID perspective) {
+        UUID other = friendship.otherUserId(perspective);
+        return FriendshipResponse.from(friendship, perspective,
+                userDirectory.username(other).orElse(null));
+    }
 
     @Transactional
     public FriendshipResponse sendRequest(UUID callerId, FriendRequest request) {
@@ -102,7 +111,7 @@ public class FriendService {
         // Notify the recipient live; the sender has the REST response.
         AfterCommit.run(() -> webSocketGateway.sendToUser(targetId,
                 OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST,
-                        FriendshipResponse.from(friendship, targetId))));
+                        toResponse(friendship, targetId))));
 
         // Durable notification via the transactional outbox.
         outboxWriter.writeNotification(OutboxEventType.FRIEND_REQUESTED,
@@ -111,7 +120,7 @@ public class FriendService {
                         NotificationType.FRIEND_REQUEST, ReferenceType.FRIENDSHIP,
                         friendship.getId(), "sent you a friend request", false));
 
-        return FriendshipResponse.from(friendship, callerId);
+        return toResponse(friendship, callerId);
     }
 
     @Transactional(readOnly = true)
@@ -119,7 +128,7 @@ public class FriendService {
 
         return friendshipRepository.findPendingReceived(callerId)
                 .stream()
-                .map(friendship -> FriendshipResponse.from(friendship, callerId))
+                .map(friendship -> toResponse(friendship, callerId))
                 .toList();
     }
 
@@ -128,7 +137,7 @@ public class FriendService {
 
         return friendshipRepository.findPendingSent(callerId)
                 .stream()
-                .map(friendship -> FriendshipResponse.from(friendship, callerId))
+                .map(friendship -> toResponse(friendship, callerId))
                 .toList();
     }
 
@@ -141,7 +150,7 @@ public class FriendService {
                         FriendshipStatus.ACCEPTED
                 )
                 .stream()
-                .map(friendship -> FriendshipResponse.from(friendship, callerId))
+                .map(friendship -> toResponse(friendship, callerId))
                 .toList();
     }
 
@@ -173,7 +182,7 @@ public class FriendService {
         // Notify the original requester that their request was accepted.
         AfterCommit.run(() -> webSocketGateway.sendToUser(otherUserId,
                 OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST_ACCEPTED,
-                        FriendshipResponse.from(friendship, otherUserId))));
+                        toResponse(friendship, otherUserId))));
 
         // Durable notification via the transactional outbox.
         outboxWriter.writeNotification(OutboxEventType.FRIEND_REQUEST_ACCEPTED,
@@ -182,7 +191,7 @@ public class FriendService {
                         NotificationType.FRIEND_REQUEST_ACCEPTED, ReferenceType.FRIENDSHIP,
                         friendship.getId(), "accepted your friend request", false));
 
-        return FriendshipResponse.from(friendship, callerId);
+        return toResponse(friendship, callerId);
     }
 
     @Transactional
@@ -213,9 +222,9 @@ public class FriendService {
         // Let the requester clear the pending request from their UI.
         AfterCommit.run(() -> webSocketGateway.sendToUser(otherUserId,
                 OutboundMessage.of(OutboundMessage.Type.FRIEND_REQUEST_DECLINED,
-                        FriendshipResponse.from(friendship, otherUserId))));
+                        toResponse(friendship, otherUserId))));
 
-        return FriendshipResponse.from(friendship, callerId);
+        return toResponse(friendship, callerId);
     }
 
     @Transactional

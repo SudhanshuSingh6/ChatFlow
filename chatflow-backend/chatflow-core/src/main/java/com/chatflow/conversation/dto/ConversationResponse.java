@@ -12,6 +12,10 @@ public record ConversationResponse(
         UUID id,
         ConversationType type,
         String name,
+        /** Display title: group name for GROUP, the other participant's username for DIRECT. */
+        String title,
+        /** The other participant for DIRECT conversations; null for GROUP. */
+        UUID peerId,
         UUID createdBy,
         /** Null in list views; populated in detail views. */
         List<ParticipantResponse> participants,
@@ -26,9 +30,11 @@ public record ConversationResponse(
     public static ConversationResponse summary(Conversation c,
                                                ParticipantRole callerRole,
                                                long unread,
-                                               int memberCount) {
+                                               int memberCount,
+                                               String title,
+                                               UUID peerId) {
         return new ConversationResponse(
-                c.getId(), c.getType(), c.getName(), c.getCreatedBy(),
+                c.getId(), c.getType(), c.getName(), title, peerId, c.getCreatedBy(),
                 null, c.getLastMessagePreview(), c.getLastMessageAt(), c.getLastMessageSeq(),
                 unread, callerRole, memberCount);
     }
@@ -37,9 +43,11 @@ public record ConversationResponse(
     public static ConversationResponse detail(Conversation c,
                                               List<ParticipantResponse> participants,
                                               ParticipantRole callerRole,
-                                              long unread) {
+                                              long unread,
+                                              String title,
+                                              UUID peerId) {
         return new ConversationResponse(
-                c.getId(), c.getType(), c.getName(), c.getCreatedBy(),
+                c.getId(), c.getType(), c.getName(), title, peerId, c.getCreatedBy(),
                 participants, c.getLastMessagePreview(), c.getLastMessageAt(), c.getLastMessageSeq(),
                 unread, callerRole, participants.size());
     }

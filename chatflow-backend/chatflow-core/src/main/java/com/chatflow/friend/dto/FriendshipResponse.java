@@ -2,8 +2,6 @@ package com.chatflow.friend.dto;
 
 import com.chatflow.friend.entity.Friendship;
 import com.chatflow.friend.entity.FriendshipStatus;
-import lombok.Builder;
-import lombok.Data;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -11,6 +9,7 @@ import java.util.UUID;
 public record FriendshipResponse(
         UUID id,
         UUID otherUserId,
+        String otherUsername,
         UUID initiatorId,
         FriendshipStatus status,
         Instant createdAt,
@@ -18,11 +17,13 @@ public record FriendshipResponse(
 ) {
     public static FriendshipResponse from(
             Friendship friendship,
-            UUID callerId
+            UUID callerId,
+            String otherUsername
     ) {
         return new FriendshipResponse(
                 friendship.getId(),
                 friendship.otherUserId(callerId),
+                otherUsername,
                 friendship.getInitiatorId(),
                 friendship.getStatus(),
                 friendship.getCreatedAt(),

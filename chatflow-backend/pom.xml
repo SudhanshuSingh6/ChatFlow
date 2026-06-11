@@ -22,6 +22,7 @@
 
     <modules>
         <module>chatflow-contracts</module>
+        <module>chatflow-storage</module>
         <module>chatflow-core</module>
         <module>chatflow-ai</module>
         <module>chatflow-gateway</module>
@@ -42,6 +43,12 @@
             <dependency>
                 <groupId>com.chatflow</groupId>
                 <artifactId>chatflow-contracts</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Internal shared storage layer (object store) — core + media depend on it. -->
+            <dependency>
+                <groupId>com.chatflow</groupId>
+                <artifactId>chatflow-storage</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <!-- Spring Cloud BOM (gateway lives here). -->

@@ -8,6 +8,7 @@ import com.chatflow.infra.websocket.OutboundMessage;
 import com.chatflow.infra.websocket.WebSocketGateway;
 import com.chatflow.user.entity.User;
 import com.chatflow.user.repository.UserRepository;
+import com.chatflow.user.service.UserDirectory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -28,10 +29,11 @@ class FriendServiceTest {
 
     private final FriendshipRepository friendshipRepo = mock(FriendshipRepository.class);
     private final UserRepository userRepo = mock(UserRepository.class);
+    private final UserDirectory userDirectory = mock(UserDirectory.class);
     private final WebSocketGateway gateway = mock(WebSocketGateway.class);
     private final OutboxWriter outboxWriter = mock(OutboxWriter.class);
     private final FriendService service =
-            new FriendService(friendshipRepo, userRepo, gateway, outboxWriter);
+            new FriendService(friendshipRepo, userRepo, userDirectory, gateway, outboxWriter);
 
     private OutboundMessage capturePushTo(UUID userId) {
         ArgumentCaptor<OutboundMessage> frame = ArgumentCaptor.forClass(OutboundMessage.class);

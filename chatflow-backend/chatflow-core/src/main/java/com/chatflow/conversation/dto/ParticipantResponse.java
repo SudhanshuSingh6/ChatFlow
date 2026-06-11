@@ -8,14 +8,16 @@ import java.util.UUID;
 
 public record ParticipantResponse(
         UUID userId,
+        String username,
         ParticipantRole role,
         Instant joinedAt,
         long lastReadSeq,
         long lastDeliveredSeq
 ) {
-    public static ParticipantResponse from(ConversationParticipant p) {
+    public static ParticipantResponse from(ConversationParticipant p, String username) {
         return new ParticipantResponse(
                 p.getUserId(),
+                username,
                 p.getRole(),
                 p.getJoinedAt(),
                 p.getLastReadSeq(),

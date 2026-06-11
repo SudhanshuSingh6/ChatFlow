@@ -1,0 +1,8 @@
+# Keep build context small/clean (Dockerfiles build from source via the reactor).
+**/target/
+.git/
+.idea/
+*.iml
+uploads/
+docs/
+*.md

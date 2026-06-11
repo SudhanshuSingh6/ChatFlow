@@ -11,6 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -67,9 +68,14 @@ public class CoreCommandClient {
     public void inbound(UUID userId, String type, JsonNode payload, String requestId) {
         circuitBreakerFactory.create("core-inbound").run(
                 () -> {
-                    postInbound(Map.of(
-                            "userId", userId, "type", type,
-                            "payload", payload, "requestId", requestId == null ? "" : requestId));
+                    // HashMap (not Map.of) so a null payload reaches core's own validation
+                    // instead of NPE-ing here and masking as "backend unavailable".
+                    Map<String, Object> body = new HashMap<>();
+                    body.put("userId", userId);
+                    body.put("type", type);
+                    body.put("payload", payload);
+                    body.put("requestId", requestId == null ? "" : requestId);
+                    postInbound(body);
                     return null;
                 },
                 throwable -> {

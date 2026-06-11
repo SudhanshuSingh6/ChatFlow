@@ -185,6 +185,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-must-be-at-least-32-chars}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+      # Only used under the local (non-s3) storage profile, which signs /media/** URLs.
+      MEDIA_SIGNING_SECRET: ${MEDIA_SIGNING_SECRET:-change-me-local-media-signing-secret-32-chars}
 
   ai:
     profiles: ["apps"]

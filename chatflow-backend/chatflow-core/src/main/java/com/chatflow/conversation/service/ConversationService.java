@@ -20,6 +20,7 @@ import com.chatflow.notification.entity.NotificationType;
 import com.chatflow.notification.entity.ReferenceType;
 import com.chatflow.notification.event.NotificationCommand;
 import com.chatflow.user.repository.UserRepository;
+import com.chatflow.user.service.UserDirectory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +51,7 @@ public class ConversationService {
     private final ConversationParticipantRepository participantRepository;
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final UserDirectory userDirectory;
     private final FriendshipRepository friendshipRepository;
     private final WebSocketGateway webSocketGateway;
     private final OutboxWriter outboxWriter;
@@ -153,7 +156,8 @@ public class ConversationService {
                             .lastDeliveredSeq(max)
                             .build());
 
-            ParticipantResponse memberResponse = ParticipantResponse.from(member);
+            ParticipantResponse memberResponse =
+                    ParticipantResponse.from(member, userDirectory.username(newMemberId).orElse(null));
             List<UUID> recipients = recipientsExcept(conversationId, callerId);
             AfterCommit.run(() -> webSocketGateway.sendToUsers(recipients,
                     OutboundMessage.of(OutboundMessage.Type.GROUP_MEMBER_ADDED,
@@ -240,6 +244,8 @@ public class ConversationService {
 
         target.setRole(newRole);
         ConversationParticipant saved = participantRepository.save(target);
+        ParticipantResponse savedResponse =
+                ParticipantResponse.from(saved, userDirectory.username(targetUserId).orElse(null));
 
         List<UUID> recipients = recipientsExcept(conversationId, callerId);
         AfterCommit.run(() -> webSocketGateway.sendToUsers(recipients,
@@ -251,7 +257,7 @@ public class ConversationService {
                 new NotificationCommand(List.of(targetUserId), callerId,
                         NotificationType.GROUP_ROLE_CHANGED, ReferenceType.CONVERSATION,
                         conversationId, "changed your role to " + newRole, false));
-        return ParticipantResponse.from(saved);
+        return savedResponse;
     }
 
     @Transactional
@@ -311,12 +317,31 @@ public class ConversationService {
 
     @Transactional(readOnly = true)
     public List<ConversationResponse> listForCaller(UUID callerId) {
-        return conversationRepository.findAllForUser(callerId).stream()
+        List<Conversation> conversations = conversationRepository.findAllForUser(callerId);
+
+        // Resolve the peer for each DIRECT conversation, then batch-resolve their usernames
+        // in a single query (the title for a 1:1 is the other participant's username).
+        Map<UUID, UUID> peerByConversation = new HashMap<>();
+        for (Conversation c : conversations) {
+            if (c.isDirect()) {
+                participantRepository.findUserIdsByConversationId(c.getId()).stream()
+                        .filter(id -> !id.equals(callerId))
+                        .findFirst()
+                        .ifPresent(peer -> peerByConversation.put(c.getId(), peer));
+            }
+        }
+        Map<UUID, String> peerNames = userDirectory.usernames(peerByConversation.values());
+
+        return conversations.stream()
                 .map(c -> {
                     ConversationParticipant me = requireMembership(c.getId(), callerId);
                     long unread = messageRepository.countUnread(c.getId(), me.getLastReadSeq(), callerId);
                     int memberCount = (int) participantRepository.countByConversationId(c.getId());
-                    return ConversationResponse.summary(c, me.getRole(), unread, memberCount);
+                    UUID peerId = peerByConversation.get(c.getId());
+                    String title = c.isGroup()
+                            ? c.getName()
+                            : (peerId != null ? peerNames.get(peerId) : null);
+                    return ConversationResponse.summary(c, me.getRole(), unread, memberCount, title, peerId);
                 })
                 .toList();
     }
@@ -367,10 +392,26 @@ public class ConversationService {
                 .orElseThrow(() -> new SecurityException(
                         "User " + callerId + " is not a participant in " + conversation.getId()));
         long unread = messageRepository.countUnread(conversation.getId(), me.getLastReadSeq(), callerId);
-        return ConversationResponse.detail(
-                conversation,
-                participants.stream().map(ParticipantResponse::from).toList(),
-                me.getRole(), unread);
+
+        Map<UUID, String> names = userDirectory.usernames(
+                participants.stream().map(ConversationParticipant::getUserId).toList());
+        List<ParticipantResponse> roster = participants.stream()
+                .map(p -> ParticipantResponse.from(p, names.get(p.getUserId())))
+                .toList();
+
+        UUID peerId = null;
+        String title;
+        if (conversation.isGroup()) {
+            title = conversation.getName();
+        } else {
+            peerId = participants.stream()
+                    .map(ConversationParticipant::getUserId)
+                    .filter(id -> !id.equals(callerId))
+                    .findFirst()
+                    .orElse(null);
+            title = peerId != null ? names.get(peerId) : null;
+        }
+        return ConversationResponse.detail(conversation, roster, me.getRole(), unread, title, peerId);
     }
 
     private Conversation requireConversation(UUID conversationId) {

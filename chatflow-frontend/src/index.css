@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* Brand gradient — single source of truth for the blue identity. */
+@utility bg-brand {
+  background-image: linear-gradient(
+    to bottom right,
+    var(--color-sky-500),
+    var(--color-blue-600)
+  );
+}
+
+/* Subtle entrance for newly mounted message bubbles. */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-msg-in {
+  animation: msg-in 0.18s ease-out;
+}
