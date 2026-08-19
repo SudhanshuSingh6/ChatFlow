@@ -26,6 +26,7 @@ export default function LoginPage() {
     <AuthLayout>
       <AuthForm
         title="Welcome Back"
+        subtitle="Sign in to continue chatting"
         submitText="Login"
         footerText="Don't have an account?"
         footerLinkText="Register"

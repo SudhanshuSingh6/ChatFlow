@@ -10,4 +10,7 @@ export const queryKeys = {
     ["friends", "requests", box] as const,
   userPresence: (userId: string) => ["users", userId, "presence"] as const,
   userSearch: (q: string) => ["users", "search", q] as const,
+  notifications: ["notifications"] as const,
+  notificationUnreadCount: ["notifications", "unread-count"] as const,
+  messageSearch: (id: string, q: string) => ["messages", "search", id, q] as const,
 };

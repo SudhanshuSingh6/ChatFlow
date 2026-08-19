@@ -1,24 +1,106 @@
 @import "tailwindcss";
 
-/* Brand gradient — single source of truth for the blue identity. */
+/* ── Design-system tokens (from ui/DESIGN.md) ─────────────────────────── */
+@theme {
+  /* Font */
+  --font-family-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Primary */
+  --color-primary:           #0058be;
+  --color-on-primary:        #ffffff;
+  --color-primary-container: #2170e4;
+  --color-on-primary-container: #fefcff;
+  --color-inverse-primary:   #adc6ff;
+  --color-primary-fixed:     #d8e2ff;
+  --color-primary-fixed-dim: #adc6ff;
+  --color-on-primary-fixed:  #001a42;
+  --color-on-primary-fixed-variant: #004395;
+  --color-surface-tint:      #005ac2;
+
+  /* Secondary */
+  --color-secondary:          #505f76;
+  --color-on-secondary:       #ffffff;
+  --color-secondary-container: #d0e1fb;
+  --color-on-secondary-container: #54647a;
+  --color-secondary-fixed:    #d3e4fe;
+  --color-secondary-fixed-dim: #b7c8e1;
+  --color-on-secondary-fixed: #0b1c30;
+  --color-on-secondary-fixed-variant: #38485d;
+
+  /* Tertiary (presence green) */
+  --color-tertiary:           #006947;
+  --color-on-tertiary:        #ffffff;
+  --color-tertiary-container: #00855b;
+  --color-on-tertiary-container: #f5fff6;
+  --color-tertiary-fixed:     #6ffbbe;
+  --color-tertiary-fixed-dim: #4edea3;
+  --color-on-tertiary-fixed:  #002113;
+  --color-on-tertiary-fixed-variant: #005236;
+
+  /* Error */
+  --color-error:              #ba1a1a;
+  --color-on-error:           #ffffff;
+  --color-error-container:    #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Surface scale */
+  --color-background:                #f7f9fb;
+  --color-on-background:             #191c1e;
+  --color-surface:                   #f7f9fb;
+  --color-surface-dim:               #d8dadc;
+  --color-surface-bright:            #f7f9fb;
+  --color-surface-container-lowest:  #ffffff;
+  --color-surface-container-low:     #f2f4f6;
+  --color-surface-container:         #eceef0;
+  --color-surface-container-high:    #e6e8ea;
+  --color-surface-container-highest: #e0e3e5;
+  --color-surface-variant:           #e0e3e5;
+  --color-on-surface:                #191c1e;
+  --color-on-surface-variant:        #424754;
+  --color-inverse-surface:           #2d3133;
+  --color-inverse-on-surface:        #eff1f3;
+
+  /* Outline */
+  --color-outline:         #727785;
+  --color-outline-variant: #c2c6d6;
+
+  /* Border radius */
+  --radius-sm:   0.25rem;
+  --radius:      0.5rem;
+  --radius-md:   0.75rem;
+  --radius-lg:   1rem;
+  --radius-xl:   1.5rem;
+  --radius-full: 9999px;
+}
+
+/* ── Material Symbols ─────────────────────────────────────────────────── */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.material-symbols-outlined.fill-1 {
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* ── Global base ──────────────────────────────────────────────────────── */
+body {
+  font-family: var(--font-family-sans);
+  background-color: var(--color-background);
+  color: var(--color-on-surface);
+}
+
+/* ── Brand gradient (kept for backward-compat on avatar palette) ──────── */
 @utility bg-brand {
   background-image: linear-gradient(
     to bottom right,
-    var(--color-sky-500),
-    var(--color-blue-600)
+    var(--color-sky-500, #0ea5e9),
+    var(--color-blue-600, #2563eb)
   );
 }
 
-/* Subtle entrance for newly mounted message bubbles. */
+/* ── Message entrance animation ───────────────────────────────────────── */
 @keyframes msg-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
 }
 
 @utility animate-msg-in {

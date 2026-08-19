@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
-import Rail from "../components/nav/Rail";
+import Sidebar from "../components/nav/Sidebar";
 
-/** Authenticated layout: the icon rail plus the active list/conversation panes. */
+/** Authenticated layout: sidebar + active list/conversation panes. */
 export default function AppShell() {
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
-      <Rail />
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
+      <Sidebar />
       <Outlet />
     </div>
   );

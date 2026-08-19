@@ -2,12 +2,13 @@ import { useState } from "react";
 import { FiCheck } from "react-icons/fi";
 import Modal from "./Modal";
 import Avatar from "../ui/Avatar";
+import Button from "../ui/Button";
+import Input from "../ui/Input";
 import { cn } from "../../lib/utils/cn";
 import { useFriends } from "../../hooks/useFriends";
 import { useCreateGroup } from "../../hooks/useConversations";
 import { getErrorMessage } from "../../lib/api/client";
 
-/** Name a group and pick friends to add (backend requires members to be friends). */
 export default function NewGroupModal({ onClose }: { onClose: () => void }) {
   const { data: friends, isLoading } = useFriends();
   const createGroup = useCreateGroup();
@@ -33,17 +34,18 @@ export default function NewGroupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal title="New group" onClose={onClose}>
-      <input
+      <Input
+        id="group-name"
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Group name"
-        className="mb-3 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+        className="mb-3"
       />
 
       {isLoading ? (
-        <p className="py-6 text-center text-sm text-gray-400">Loading friends…</p>
+        <p className="py-6 text-center text-sm text-on-surface-variant">Loading friends…</p>
       ) : !friends?.length ? (
-        <p className="py-6 text-center text-sm text-gray-400">
+        <p className="py-6 text-center text-sm text-on-surface-variant">
           Add some friends first.
         </p>
       ) : (
@@ -55,18 +57,18 @@ export default function NewGroupModal({ onClose }: { onClose: () => void }) {
                 <button
                   type="button"
                   onClick={() => toggle(f.otherUserId)}
-                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-gray-50"
+                  className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-surface-container"
                 >
                   <Avatar name={f.otherUsername ?? "?"} size={36} />
-                  <span className="flex-1 font-medium text-gray-800">
+                  <span className="flex-1 text-sm font-semibold text-on-surface">
                     {f.otherUsername ?? "Unknown"}
                   </span>
                   <span
                     className={cn(
                       "flex h-5 w-5 items-center justify-center rounded-full border",
                       isSelected
-                        ? "bg-brand border-transparent text-white"
-                        : "border-gray-300",
+                        ? "border-transparent bg-primary text-on-primary"
+                        : "border-outline-variant",
                     )}
                   >
                     {isSelected && <FiCheck className="text-xs" />}
@@ -79,19 +81,20 @@ export default function NewGroupModal({ onClose }: { onClose: () => void }) {
       )}
 
       {createGroup.isError && (
-        <p className="mt-2 text-sm text-red-500">
+        <p className="mt-2 text-sm text-error">
           {getErrorMessage(createGroup.error)}
         </p>
       )}
 
-      <button
-        type="button"
+      <Button
+        fullWidth
         onClick={submit}
-        disabled={!name.trim() || selected.size === 0 || createGroup.isPending}
-        className="bg-brand mt-4 w-full rounded-lg px-4 py-2.5 font-semibold text-white transition hover:opacity-95 disabled:opacity-40"
+        isLoading={createGroup.isPending}
+        disabled={!name.trim() || selected.size === 0}
+        className="mt-4"
       >
         {createGroup.isPending ? "Creating…" : `Create group (${selected.size})`}
-      </button>
+      </Button>
     </Modal>
   );
 }

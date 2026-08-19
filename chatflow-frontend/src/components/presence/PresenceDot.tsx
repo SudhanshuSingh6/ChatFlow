@@ -1,6 +1,5 @@
 import { cn } from "../../lib/utils/cn";
 
-/** Small status dot: green = online, gray = offline. */
 export default function PresenceDot({
   online,
   className,
@@ -11,8 +10,8 @@ export default function PresenceDot({
   return (
     <span
       className={cn(
-        "inline-block h-2.5 w-2.5 rounded-full",
-        online ? "bg-green-500" : "bg-gray-300",
+        "inline-block h-3 w-3 rounded-full border-2 border-surface-container-lowest",
+        online ? "bg-tertiary-container" : "bg-outline-variant",
         className,
       )}
     />

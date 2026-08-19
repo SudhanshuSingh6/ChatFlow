@@ -9,6 +9,11 @@ import { queryKeys } from "../config/queryKeys";
 import {
   createDirect,
   createGroup,
+  deleteGroup,
+  addParticipant,
+  removeParticipant,
+  updateMemberRole,
+  transferOwnership,
   getConversation,
   getMessages,
   listConversations,
@@ -80,6 +85,74 @@ export function useCreateGroup() {
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
       navigate(`/groups/${conversation.id}`);
+    },
+  });
+}
+
+export function useDeleteGroup() {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  return useMutation({
+    mutationFn: (id: string) => deleteGroup(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+      navigate("/chats");
+    },
+  });
+}
+
+export function useAddParticipant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userId }: { conversationId: string; userId: string }) =>
+      addParticipant(conversationId, userId),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
+    },
+  });
+}
+
+export function useRemoveParticipant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userId }: { conversationId: string; userId: string }) =>
+      removeParticipant(conversationId, userId),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
+    },
+  });
+}
+
+export function useUpdateRole() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      userId,
+      role,
+    }: {
+      conversationId: string;
+      userId: string;
+      role: "ADMIN" | "MEMBER";
+    }) => updateMemberRole(conversationId, userId, role),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
+    },
+  });
+}
+
+export function useTransferOwnership() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      newOwnerId,
+    }: {
+      conversationId: string;
+      newOwnerId: string;
+    }) => transferOwnership(conversationId, newOwnerId),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversation(conversationId) });
     },
   });
 }

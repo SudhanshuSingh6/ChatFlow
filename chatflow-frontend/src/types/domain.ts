@@ -51,6 +51,14 @@ export interface Message {
   createdAt: string;
   editedAt: string | null;
   deleted: boolean;
+  /** Present on MEDIA messages. */
+  mediaId?: string | null;
+  /** Populated once the media-processing pipeline finishes the thumbnail. */
+  thumbnailUrl?: string | null;
+  /** Original filename (e.g. "photo.jpg"). */
+  originalFilename?: string | null;
+  /** Broad category used for icon selection. */
+  mediaType?: "IMAGE" | "VIDEO" | "DOCUMENT" | null;
 }
 
 /** A page of history plus the cursor for the next (older) page; null = no more. */
@@ -78,4 +86,27 @@ export interface Presence {
 export interface ConversationPresence {
   participantOne: Presence | null;
   participantTwo: Presence | null;
+}
+
+export type NotificationType =
+  | "FRIEND_REQUEST"
+  | "FRIEND_REQUEST_ACCEPTED"
+  | "GROUP_MEMBER_ADDED"
+  | "GROUP_MEMBER_REMOVED"
+  | "GROUP_ROLE_CHANGED"
+  | "GROUP_OWNERSHIP_TRANSFERRED"
+  | "NEW_MESSAGE";
+
+export type ReferenceType = "FRIENDSHIP" | "CONVERSATION" | "MESSAGE";
+
+export interface Notification {
+  id: string;
+  actorId: string;
+  type: NotificationType;
+  referenceType: ReferenceType;
+  referenceId: string;
+  preview: string | null;
+  eventCount: number;
+  read: boolean;
+  createdAt: string;
 }

@@ -4,6 +4,7 @@ import DateDivider from "./DateDivider";
 import TypingDots from "./TypingDots";
 import { formatDateDivider } from "../../lib/utils/time";
 import type { Message } from "../../types/domain";
+import { getMediaUrl } from "../../lib/api/media";
 
 interface MessageListProps {
   messages: Message[];
@@ -14,6 +15,8 @@ interface MessageListProps {
   /** Highest seq others have delivered/read — drives own-message ticks. */
   deliveredSeq?: number;
   readSeq?: number;
+  /** Sequence number to scroll to and briefly highlight. */
+  highlightedSeq?: number;
 }
 
 export default function MessageList({
@@ -23,6 +26,7 @@ export default function MessageList({
   senderNames,
   deliveredSeq = 0,
   readSeq = 0,
+  highlightedSeq,
 }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(false);
@@ -34,6 +38,12 @@ export default function MessageList({
     });
     mountedRef.current = true;
   }, [messages.length, typingName]);
+
+  useEffect(() => {
+    if (highlightedSeq == null) return;
+    const el = document.getElementById(`msg-seq-${highlightedSeq}`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedSeq]);
 
   const rows: ReactNode[] = [];
   let lastDay = "";
@@ -55,26 +65,48 @@ export default function MessageList({
           ? "DELIVERED"
           : "SENT"
       : undefined;
-    rows.push(
-      <MessageBubble
-        key={m.id}
-        content={m.content}
-        createdAt={m.createdAt}
-        mine={mine}
-        status={status}
-        firstOfGroup={firstOfGroup}
-        senderLabel={
-          !mine && firstOfGroup ? senderNames?.[m.senderId] : undefined
+    const highlighted = m.sequenceNumber === highlightedSeq;
+    const onMediaClick = m.mediaId
+      ? () => {
+          getMediaUrl(m.mediaId!).then((r) => window.open(r.url, "_blank")).catch(() => {
+            if (m.thumbnailUrl) window.open(m.thumbnailUrl, "_blank");
+          });
         }
-      />,
+      : undefined;
+    rows.push(
+      <div
+        key={m.id}
+        id={`msg-seq-${m.sequenceNumber}`}
+        className={highlighted ? "rounded-lg outline outline-2 outline-primary/40 transition-all duration-700" : undefined}
+      >
+        <MessageBubble
+          content={m.content}
+          createdAt={m.createdAt}
+          mine={mine}
+          status={status}
+          firstOfGroup={firstOfGroup}
+          senderLabel={
+            !mine && firstOfGroup ? senderNames?.[m.senderId] : undefined
+          }
+          senderName={
+            !mine && firstOfGroup ? senderNames?.[m.senderId] : undefined
+          }
+          messageType={m.type}
+          thumbnailUrl={m.thumbnailUrl}
+          mediaId={m.mediaId}
+          mediaType={m.mediaType}
+          originalFilename={m.originalFilename}
+          onMediaClick={onMediaClick}
+        />
+      </div>,
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 px-5 py-4">
+    <div className="flex-1 overflow-y-auto bg-surface-bright px-6 py-4">
       {messages.length === 0 && !typingName && (
-        <div className="flex h-full items-center justify-center text-sm text-gray-400">
-          No messages yet — say hello 👋
+        <div className="flex h-full items-center justify-center text-sm text-on-surface-variant">
+          No messages yet — say hello
         </div>
       )}
       {rows}

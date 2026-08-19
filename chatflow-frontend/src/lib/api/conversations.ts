@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { Conversation, MessagePage } from "../../types/domain";
+import type { Conversation, Message, MessagePage, Participant } from "../../types/domain";
 
 export async function listConversations(): Promise<Conversation[]> {
   const { data } = await apiClient.get<Conversation[]>("/api/conversations");
@@ -24,6 +24,19 @@ export async function getMessages(
   return data;
 }
 
+/** Catch-up page; returns messages with sequenceNumber > `after`. */
+export async function getMessagesAfter(
+  id: string,
+  after: number,
+  limit = 50,
+): Promise<MessagePage> {
+  const { data } = await apiClient.get<MessagePage>(
+    `/api/conversations/${id}/messages/after`,
+    { params: { after, limit } },
+  );
+  return data;
+}
+
 export async function createDirect(userId: string): Promise<Conversation> {
   const { data } = await apiClient.post<Conversation>(
     "/api/conversations/direct",
@@ -40,5 +53,55 @@ export async function createGroup(
     "/api/conversations/group",
     { name, memberIds },
   );
+  return data;
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  await apiClient.delete(`/api/conversations/${id}`);
+}
+
+export async function addParticipant(id: string, userId: string): Promise<Participant> {
+  const { data } = await apiClient.post<Participant>(
+    `/api/conversations/${id}/participants`,
+    { userId },
+  );
+  return data;
+}
+
+export async function removeParticipant(id: string, userId: string): Promise<void> {
+  await apiClient.delete(`/api/conversations/${id}/participants/${userId}`);
+}
+
+export async function updateMemberRole(
+  id: string,
+  userId: string,
+  role: "ADMIN" | "MEMBER",
+): Promise<Participant> {
+  const { data } = await apiClient.put<Participant>(
+    `/api/conversations/${id}/participants/${userId}/role`,
+    { role },
+  );
+  return data;
+}
+
+export async function transferOwnership(
+  id: string,
+  newOwnerId: string,
+): Promise<Conversation> {
+  const { data } = await apiClient.post<Conversation>(
+    `/api/conversations/${id}/transfer-ownership`,
+    { newOwnerId },
+  );
+  return data;
+}
+
+export async function searchMessages(
+  conversationId: string,
+  query: string,
+  limit = 20,
+): Promise<Message[]> {
+  const { data } = await apiClient.get<Message[]>("/api/messages/search", {
+    params: { q: query, conversationId, limit },
+  });
   return data;
 }

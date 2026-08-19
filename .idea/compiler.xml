@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Annotation profile for chatflow" enabled="true">
+        <sourceOutputDir name="target/generated-sources/annotations" />
+        <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.44/lombok-1.18.44.jar" />
+        </processorPath>
+        <module name="chatflow-core" />
+        <module name="chatflow-storage" />
+        <module name="chatflow-gateway" />
+        <module name="chatflow-contracts" />
+        <module name="chatflow-ai" />
+        <module name="chatflow-realtime" />
+        <module name="chatflow-media" />
+      </profile>
+    </annotationProcessing>
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="chatflow-ai" options="-parameters" />
+      <module name="chatflow-backend" options="-parameters" />
+      <module name="chatflow-contracts" options="-parameters" />
+      <module name="chatflow-core" options="-parameters" />
+      <module name="chatflow-gateway" options="-parameters" />
+      <module name="chatflow-media" options="-parameters" />
+      <module name="chatflow-realtime" options="-parameters" />
+      <module name="chatflow-storage" options="-parameters" />
+    </option>
+  </component>
+</project>

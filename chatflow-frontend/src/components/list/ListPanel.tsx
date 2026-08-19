@@ -8,7 +8,7 @@ interface ListPanelProps {
   children: ReactNode;
 }
 
-/** Middle pane shell: title header, search, and a scrollable list body. */
+/** Middle pane: title header, search, scrollable list body. */
 export default function ListPanel({
   title,
   actions,
@@ -16,13 +16,16 @@ export default function ListPanel({
   children,
 }: ListPanelProps) {
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-r border-gray-200 bg-white">
-      <header className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-        <div className="flex items-center gap-1 text-gray-500">{actions}</div>
-      </header>
-
-      <div className="px-3 pb-2">
+    <aside className="flex w-80 shrink-0 flex-col border-r border-outline-variant bg-surface-container-lowest">
+      <div className="border-b border-outline-variant p-4">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-on-surface">{title}</h2>
+          {actions && (
+            <div className="flex items-center gap-1 text-on-surface-variant">
+              {actions}
+            </div>
+          )}
+        </div>
         <SearchBar placeholder={searchPlaceholder} />
       </div>
 

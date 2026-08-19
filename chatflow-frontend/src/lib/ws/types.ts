@@ -70,3 +70,10 @@ export interface TypingPayload {
   userId: string;
   typing: boolean;
 }
+
+export interface MediaThumbnailReadyPayload {
+  messageId: string;
+  conversationId: string;
+  mediaId: string;
+  thumbnailUrl: string;
+}

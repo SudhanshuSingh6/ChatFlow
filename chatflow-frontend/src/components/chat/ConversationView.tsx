@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "../../config/queryKeys";
 import type { Conversation } from "../../types/domain";
 import ConversationHeader from "./ConversationHeader";
+import GroupSettingsPanel from "./GroupSettingsPanel";
+import MessageSearchPanel from "./MessageSearchPanel";
 import MessageList from "./MessageList";
 import MessageInput from "./MessageInput";
 import { MessageListSkeleton } from "../ui/Skeleton";
@@ -27,6 +29,11 @@ export default function ConversationView({ id }: { id: string }) {
   const wsOpen = useWsStore((s) => s.status === "open");
   const { data: conversation, isLoading, isError } = useConversation(id);
   const isDirect = conversation?.type === "DIRECT";
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [highlightedSeq, setHighlightedSeq] = useState<number | undefined>();
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     messages,
@@ -45,6 +52,22 @@ export default function ConversationView({ id }: { id: string }) {
   const seedPresence = usePresenceStore((s) => s.seed);
   const presenceMap = usePresenceStore((s) => s.online);
   const typingUserIds = useTypingStore((s) => s.byConversation[id]) ?? [];
+
+  // Clear search when switching conversations.
+  useEffect(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setHighlightedSeq(undefined);
+    return () => { if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current); };
+  }, [id]);
+
+  function handleSelectResult(seq: number) {
+    setHighlightedSeq(seq);
+    setSearchOpen(false);
+    setSearchQuery("");
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedSeq(undefined), 2500);
+  }
 
   // Tell the server the conversation is open (marks delivered) once per mount.
   useEffect(() => {
@@ -75,7 +98,7 @@ export default function ConversationView({ id }: { id: string }) {
   if (isLoading) {
     return (
       <main className="flex flex-1 flex-col">
-        <div className="h-[57px] border-b border-gray-200 bg-white" />
+        <div className="h-16 border-b border-outline-variant bg-surface-container-lowest" />
         <MessageListSkeleton />
       </main>
     );
@@ -107,12 +130,33 @@ export default function ConversationView({ id }: { id: string }) {
   const typingName = typingNames.length ? typingNames[0] : undefined;
 
   return (
-    <main className="flex flex-1 flex-col">
+    <main className="relative flex flex-1 flex-col">
       <ConversationHeader
         name={isDirect ? title : `# ${title}`}
         online={online}
         subtitle={subtitle}
+        isGroup={!isDirect}
+        onSettingsClick={() => setSettingsOpen((v) => !v)}
+        searchOpen={searchOpen}
+        onSearchToggle={() => { setSearchOpen((v) => !v); setSearchQuery(""); }}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       />
+      {searchOpen && (
+        <MessageSearchPanel
+          conversationId={id}
+          query={searchQuery}
+          senderNames={senderNames}
+          currentUserId={currentUserId}
+          onSelect={handleSelectResult}
+        />
+      )}
+      {settingsOpen && !isDirect && (
+        <GroupSettingsPanel
+          conversation={conversation}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
 
       {messagesLoading ? (
         <MessageListSkeleton />
@@ -123,7 +167,7 @@ export default function ConversationView({ id }: { id: string }) {
               type="button"
               onClick={() => fetchNextPage()}
               disabled={isFetchingNextPage}
-              className="mx-auto my-2 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-500 transition hover:bg-gray-200 disabled:opacity-50"
+              className="mx-auto my-2 rounded-full bg-surface-container px-3 py-1 text-xs text-on-surface-variant transition hover:bg-surface-container-high disabled:opacity-50"
             >
               {isFetchingNextPage ? "Loading…" : "Load earlier messages"}
             </button>
@@ -135,6 +179,7 @@ export default function ConversationView({ id }: { id: string }) {
             deliveredSeq={deliveredSeq}
             readSeq={readSeq}
             typingName={typingName}
+            highlightedSeq={highlightedSeq}
           />
         </div>
       )}
@@ -144,6 +189,7 @@ export default function ConversationView({ id }: { id: string }) {
         onTyping={(typing) => send("TYPING", { conversationId: id, typing })}
         placeholder={`Message ${title}…`}
         disabled={!wsOpen}
+        conversationId={id}
       />
     </main>
   );

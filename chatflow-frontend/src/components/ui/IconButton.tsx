@@ -14,7 +14,10 @@ export default function IconButton({
     <button
       type="button"
       className={cn(
-        "flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none active:scale-95",
+        "flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors",
+        "hover:bg-surface-container hover:text-on-surface",
+        "focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
+        "active:scale-95",
         className,
       )}
       {...rest}

@@ -34,7 +34,7 @@ export default function FriendsPage() {
       >
         {received && received.length > 0 && (
           <div className="px-3 pb-2">
-            <p className="px-1 py-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
+            <p className="px-1 py-2 text-xs font-semibold tracking-wide text-on-surface-variant uppercase">
               Requests · {received.length}
             </p>
             {received.map((r) => (
@@ -52,18 +52,18 @@ export default function FriendsPage() {
           </div>
         )}
 
-        <p className="px-4 py-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
+        <p className="px-4 py-2 text-xs font-semibold tracking-wide text-on-surface-variant uppercase">
           All friends
         </p>
 
         {isLoading ? (
           <ConversationListSkeleton rows={4} />
         ) : isError ? (
-          <p className="px-4 py-6 text-center text-sm text-red-500">
+          <p className="px-4 py-6 text-center text-sm text-error">
             Couldn’t load friends.
           </p>
         ) : !friends?.length ? (
-          <p className="px-4 py-6 text-center text-sm text-gray-400">
+          <p className="px-4 py-6 text-center text-sm text-on-surface-variant">
             No friends yet — add someone.
           </p>
         ) : (

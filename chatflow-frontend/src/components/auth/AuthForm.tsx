@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import Button from "../ui/Button";
+import Input from "../ui/Input";
 
 export interface AuthFormData {
   username: string;
@@ -8,18 +10,19 @@ export interface AuthFormData {
 
 interface AuthFormProps {
   title: string;
+  subtitle: string;
   submitText: string;
   footerText: string;
   footerLinkText: string;
   footerLinkTo: string;
   isLoading?: boolean;
-  /** Server-side error message to display (e.g. invalid credentials). */
   error?: string | null;
   onSubmit: (data: AuthFormData) => void | Promise<void>;
 }
 
 export default function AuthForm({
   title,
+  subtitle,
   submitText,
   footerText,
   footerLinkText,
@@ -32,93 +35,69 @@ export default function AuthForm({
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<AuthFormData>({
-    defaultValues: {
-      username: "",
-      password: "",
-    },
-  });
+  } = useForm<AuthFormData>({ defaultValues: { username: "", password: "" } });
 
   return (
-    <div className="w-full max-w-md">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold">{title}</h1>
+    <div className="w-full max-w-md rounded-2xl border border-outline-variant bg-surface-container-lowest p-8 shadow-sm">
+      {/* Brand header */}
+      <div className="mb-8 flex flex-col items-center gap-2">
+        <span className="material-symbols-outlined fill-1 text-primary" style={{ fontSize: 48 }}>forum</span>
+        <span className="text-lg font-bold tracking-tight text-on-surface">ChatFlow</span>
+      </div>
 
-          <p className="text-sm text-gray-500">Sign in to continue chatting</p>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        {/* Title */}
+        <div className="space-y-1 text-center">
+          <h1 className="text-2xl font-bold text-on-surface">{title}</h1>
+          <p className="text-sm text-on-surface-variant">{subtitle}</p>
         </div>
 
+        {/* Server error */}
         {error && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
+            className="rounded-lg border border-error-container bg-error-container/30 px-4 py-3 text-sm text-error"
           >
             {error}
           </div>
         )}
 
-        <div className="space-y-1">
-          <label htmlFor="username" className="text-sm font-medium">
-            Username
-          </label>
-
-          <input
+        {/* Fields */}
+        <div className="space-y-4">
+          <Input
             id="username"
+            label="Username"
             type="text"
-            placeholder="Enter username"
-            className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+            placeholder="Enter your username"
+            error={errors.username?.message}
+            required
             {...register("username", {
               required: "Username is required",
-              minLength: {
-                value: 3,
-                message: "Username must be at least 3 characters",
-              },
+              minLength: { value: 3, message: "Username must be at least 3 characters" },
             })}
           />
 
-          {errors.username && (
-            <p className="text-sm text-red-500">{errors.username.message}</p>
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <label htmlFor="password" className="text-sm font-medium">
-            Password
-          </label>
-
-          <input
+          <Input
             id="password"
+            label="Password"
             type="password"
-            placeholder="Enter password"
-            className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/40"
+            placeholder="Enter your password"
+            error={errors.password?.message}
+            required
             {...register("password", {
               required: "Password is required",
-              minLength: {
-                value: 6,
-                message: "Password must be at least 6 characters",
-              },
+              minLength: { value: 6, message: "Password must be at least 6 characters" },
             })}
           />
-
-          {errors.password && (
-            <p className="text-sm text-red-500">{errors.password.message}</p>
-          )}
         </div>
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="bg-brand w-full rounded-lg px-4 py-3 font-semibold text-white transition hover:opacity-95 active:scale-[.99] disabled:opacity-50"
-        >
-          {isLoading ? "Loading..." : submitText}
-        </button>
+        <Button type="submit" fullWidth size="lg" isLoading={isLoading}>
+          {submitText}
+        </Button>
 
-        <p className="text-center text-sm text-gray-500">
+        <p className="text-center text-sm text-on-surface-variant">
           {footerText}{" "}
-          <Link
-            to={footerLinkTo}
-            className="font-semibold text-blue-600 hover:underline"
-          >
+          <Link to={footerLinkTo} className="font-semibold text-primary hover:underline">
             {footerLinkText}
           </Link>
         </p>

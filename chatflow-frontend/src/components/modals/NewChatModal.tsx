@@ -27,10 +27,10 @@ export default function NewChatModal({ onClose }: { onClose: () => void }) {
                 type="button"
                 disabled={createDirect.isPending}
                 onClick={() => open(f.otherUserId)}
-                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-gray-50 disabled:opacity-50"
+                className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-surface-container disabled:opacity-50"
               >
                 <Avatar name={f.otherUsername ?? "?"} size={36} />
-                <span className="font-medium text-gray-800">
+                <span className="text-sm font-semibold text-on-surface">
                   {f.otherUsername ?? "Unknown"}
                 </span>
               </button>

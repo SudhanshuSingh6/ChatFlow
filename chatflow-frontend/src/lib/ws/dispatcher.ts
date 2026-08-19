@@ -6,6 +6,7 @@ import { useTypingStore } from "../../store/typingStore";
 import type { Message } from "../../types/domain";
 import type {
   Frame,
+  MediaThumbnailReadyPayload,
   PresencePayload,
   SeenUpdatePayload,
   StatusUpdatePayload,
@@ -77,7 +78,25 @@ export function dispatchFrame(frame: Frame, ctx: DispatchContext) {
       queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
       break;
     }
-    // PONG / ERROR / NOTIFICATION* — no UI action yet.
+    case "MEDIA_MESSAGE": {
+      messages.addIncoming(frame.payload as Message);
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+      break;
+    }
+    case "MEDIA_THUMBNAIL_READY": {
+      const p = frame.payload as MediaThumbnailReadyPayload;
+      messages.updateMessage(p.messageId, p.conversationId, {
+        thumbnailUrl: p.thumbnailUrl,
+        mediaId: p.mediaId,
+      });
+      break;
+    }
+    case "NOTIFICATION":
+    case "NOTIFICATION_READ": {
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notificationUnreadCount });
+      break;
+    }
     default:
       break;
   }

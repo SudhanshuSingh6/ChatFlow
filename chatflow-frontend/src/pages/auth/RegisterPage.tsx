@@ -21,6 +21,7 @@ export default function RegisterPage() {
     <AuthLayout>
       <AuthForm
         title="Create Account"
+        subtitle="Join ChatFlow and start chatting"
         submitText="Register"
         footerText="Already have an account?"
         footerLinkText="Login"

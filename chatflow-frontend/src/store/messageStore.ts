@@ -24,6 +24,8 @@ interface MessageState {
   ackMessage: (msg: Message) => void;
   /** A message pushed to us (or replayed). */
   addIncoming: (msg: Message) => void;
+  /** Patch fields on an existing live message (e.g. thumbnailUrl from MEDIA_THUMBNAIL_READY). */
+  updateMessage: (messageId: string, conversationId: string, patch: Partial<Message>) => void;
   setDelivered: (conversationId: string, seq: number) => void;
   setRead: (conversationId: string, seq: number) => void;
 }
@@ -70,6 +72,16 @@ export const useMessageStore = create<MessageState>((set) => ({
       live: {
         ...s.live,
         [msg.conversationId]: appendUnique(s.live[msg.conversationId], msg),
+      },
+    })),
+
+  updateMessage: (messageId, conversationId, patch) =>
+    set((s) => ({
+      live: {
+        ...s.live,
+        [conversationId]: (s.live[conversationId] ?? []).map((m) =>
+          m.id === messageId ? { ...m, ...patch } : m,
+        ),
       },
     })),
 

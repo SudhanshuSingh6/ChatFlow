@@ -9,8 +9,11 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "../../store/authStore";
 import { useWsStore } from "../../store/wsStore";
+import { useMessageStore } from "../../store/messageStore";
 import { WebSocketClient } from "../../lib/ws/WebSocketClient";
 import { dispatchFrame } from "../../lib/ws/dispatcher";
+import { getMessagesAfter } from "../../lib/api/conversations";
+import { queryKeys } from "../../config/queryKeys";
 import type { InboundType } from "../../lib/ws/types";
 
 interface WebSocketContextValue {
@@ -29,12 +32,38 @@ export default function WebSocketProvider({ children }: { children: ReactNode })
   const queryClient = useQueryClient();
   const setStatus = useWsStore((s) => s.setStatus);
   const clientRef = useRef<WebSocketClient | null>(null);
+  // Tracks whether the socket has successfully opened at least once in this session.
+  // Used to distinguish first connection from a reconnect.
+  const hasConnectedRef = useRef(false);
 
   useEffect(() => {
     if (!token) return;
+    hasConnectedRef.current = false;
+
     const client = new WebSocketClient({
       onFrame: (frame) => dispatchFrame(frame, { queryClient, currentUserId }),
-      onStatus: setStatus,
+      onStatus: (status) => {
+        if (status === "open") {
+          if (hasConnectedRef.current) {
+            // Reconnect: invalidate conversation list so unread counts refresh,
+            // then replay any messages missed during the gap.
+            queryClient.invalidateQueries({ queryKey: queryKeys.conversations });
+            const live = useMessageStore.getState().live;
+            for (const [conversationId, messages] of Object.entries(live)) {
+              const maxSeq = Math.max(...messages.map((m) => m.sequenceNumber), 0);
+              if (maxSeq > 0) {
+                getMessagesAfter(conversationId, maxSeq).then(({ messages: missed }) => {
+                  missed.forEach((m) => useMessageStore.getState().addIncoming(m));
+                }).catch(() => {
+                  // Best-effort — full reload will catch it on next open.
+                });
+              }
+            }
+          }
+          hasConnectedRef.current = true;
+        }
+        setStatus(status);
+      },
     });
     clientRef.current = client;
     client.start(token);

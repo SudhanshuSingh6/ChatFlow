@@ -8,8 +8,8 @@ export default function Rail() {
 
   return (
     <nav className="bg-brand flex w-16 flex-col items-center gap-2 py-4">
-      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sm font-extrabold text-blue-600 shadow-sm">
-        CF
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-white shadow-sm">
+        <span className="material-symbols-outlined fill-1 text-primary text-2xl">forum</span>
       </div>
 
       <RailButton to="/chats" label="Chats" icon={<FiMessageCircle />} />

@@ -2,6 +2,7 @@ import {
   createContext,
   use,
   useCallback,
+  useEffect,
   useMemo,
   type ReactNode,
 } from "react";
@@ -14,6 +15,7 @@ import {
   type AuthResponse,
   type Credentials,
 } from "../../lib/api/auth";
+import { useMe } from "../../hooks/useMe";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -41,6 +43,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       setAuth(res.token, { userId: res.userId, username: res.username }),
     [setAuth],
   );
+
+  // Keep the profile in sync with the server (handles page reloads where the
+  // token is already in localStorage but the profile might be stale).
+  const { data: me } = useMe();
+  useEffect(() => {
+    if (me && token) {
+      setAuth(token, { userId: me.id, username: me.username });
+    }
+  }, [me, token, setAuth]);
 
   const loginMutation = useMutation({
     mutationFn: loginRequest,

@@ -11,7 +11,6 @@ interface ConversationRowProps {
   lastMessage: string | null;
   time: string | null;
   unread?: number;
-  /** undefined => no presence dot (e.g. groups). */
   online?: boolean;
 }
 
@@ -28,30 +27,37 @@ export default function ConversationRow({
       to={to}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-3 px-3 py-3 transition focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:-outline-offset-2 focus-visible:outline-blue-500",
-          isActive ? "bg-blue-50" : "hover:bg-gray-50",
+          "flex items-center gap-3 border-b border-outline-variant p-4 transition-colors focus-visible:outline-none",
+          isActive
+            ? "bg-surface-container-low"
+            : "hover:bg-surface-container cursor-pointer",
         )
       }
     >
-      <div className="relative">
-        <Avatar name={name} />
+      <div className="relative shrink-0">
+        <Avatar name={name} size={48} />
         {online !== undefined && (
           <PresenceDot
             online={online}
-            className="absolute right-0 bottom-0 ring-2 ring-white"
+            className="absolute right-0 bottom-0"
           />
         )}
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="truncate font-semibold text-gray-900">{name}</span>
-          <span className="shrink-0 text-xs text-gray-400">
+        <div className="flex items-baseline justify-between gap-2 mb-1">
+          <span className="truncate text-sm font-semibold text-on-surface">{name}</span>
+          <span
+            className={cn(
+              "shrink-0 text-xs",
+              unread > 0 ? "text-primary font-semibold" : "text-on-surface-variant",
+            )}
+          >
             {formatListTime(time)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm text-gray-500">
+          <span className="truncate text-xs text-on-surface-variant">
             {lastMessage ?? "No messages yet"}
           </span>
           <Badge count={unread} />
